@@ -347,7 +347,12 @@ class SchoolSecurityExcelImporter:
             if record["administration"]:
                 record["administration"] = normalize_admin_name(record["administration"])
 
-            if not record["guard_name"] and not record["school_name"]:
+            # Ignore placeholder guard names like "لا يوجد" or "بدون"
+            norm_gname = normalize_arabic(record["guard_name"]).strip()
+            if norm_gname in ("لا يوجد", "لايوجد", "لاشيء", "لا شيء", "بدون", "لا توجد", "—", "-", "لا"):
+                record["guard_name"] = ""
+
+            if not record["guard_name"]:
                 continue
 
             records.append(record)
