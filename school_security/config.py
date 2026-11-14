@@ -39,7 +39,6 @@ DEFAULT_ADMINISTRATIONS = [
 DEFAULT_AFFILIATIONS = [
     "ابتدائي",
     "إعدادي",
-    "ثانوي",
     "ثانوي عام",
     "ثانوي فني",
     "تعليم أساسي",
