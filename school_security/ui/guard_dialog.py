@@ -39,6 +39,55 @@ class GuardDialog(QDialog):
             self.load_guard_data()
 
     def init_ui(self):
+        self.setObjectName("GuardDialog")
+        self.setStyleSheet("""
+            QDialog#GuardDialog {
+                background-color: #F1F5F9;
+            }
+            QGroupBox {
+                background-color: #FFFFFF;
+                border: 1.5px solid #CBD5E1;
+                border-radius: 10px;
+                margin-top: 26px;
+                padding-top: 22px;
+                padding-bottom: 14px;
+                padding-left: 16px;
+                padding-right: 16px;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top right;
+                right: 16px;
+                padding: 4px 14px;
+                background-color: #1E40AF;
+                color: #FFFFFF;
+                border-radius: 6px;
+                font-weight: 800;
+                font-size: 12px;
+            }
+            QLabel {
+                color: #334155;
+                font-weight: 600;
+                font-size: 12px;
+                background: transparent;
+            }
+            QLineEdit, QComboBox, QTextEdit {
+                background-color: #FFFFFF;
+                border: 1.5px solid #CBD5E1;
+                border-radius: 7px;
+                padding: 6px 10px;
+                font-size: 13px;
+                color: #0F172A;
+                min-height: 24px;
+            }
+            QLineEdit:focus, QComboBox:focus, QTextEdit:focus {
+                border: 2px solid #2563EB;
+                background-color: #F8FAFC;
+            }
+        """)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
