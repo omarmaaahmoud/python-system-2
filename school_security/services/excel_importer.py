@@ -216,10 +216,14 @@ class SchoolSecurityExcelImporter:
 
                 if sheet_type == "school":
                     if matched_key == "manager_name":
+                        if seen_manager_name:
+                            continue
                         seen_manager_name = True
                     elif matched_key == "manager_phone":
                         seen_manager_phone = True
                     elif matched_key == "security_officer_name":
+                        if seen_sec_officer:
+                            continue
                         seen_sec_officer = True
                     elif matched_key == "security_officer_phone":
                         pass
@@ -288,7 +292,8 @@ class SchoolSecurityExcelImporter:
                     val = clean_cell_text(cell)
                     if "phone" in key:
                         val = normalize_numeric_string(cell)
-                    record[key] = val
+                    if val or not record.get(key):
+                        record[key] = val
 
             # Normalize administration name
             if record["administration"]:
@@ -335,7 +340,8 @@ class SchoolSecurityExcelImporter:
                     val = clean_cell_text(cell)
                     if key in ("phone", "national_id"):
                         val = normalize_numeric_string(cell)
-                    record[key] = val
+                    if val or not record.get(key):
+                        record[key] = val
 
             # Normalize administration name
             if record["administration"]:
