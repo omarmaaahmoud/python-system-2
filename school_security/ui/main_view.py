@@ -222,6 +222,18 @@ class SchoolSecurityMainView(QWidget):
         for b in self.nav_buttons:
             b.setChecked(b == nav_btn)
 
+        # Refresh the active page data immediately on navigation
+        if index == 0:
+            self.dashboard_view.load_data()
+        elif index == 1:
+            self.schools_view.on_data_updated()
+        elif index == 2:
+            self.guards_view.on_data_updated()
+        elif index == 3:
+            self.search_view.execute_search()
+        elif index == 4:
+            self.reports_view.on_view_activated()
+
     def switch_page_by_index(self, index: int):
         if index == 5:
             self.open_import_dialog()
@@ -244,4 +256,4 @@ class SchoolSecurityMainView(QWidget):
         self.dashboard_view.load_data()
         self.schools_view.on_data_updated()
         self.guards_view.on_data_updated()
-        self.reports_view.generate_selected_report()
+        self.reports_view.on_view_activated()

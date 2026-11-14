@@ -167,6 +167,7 @@ class GuardService:
     def delete_guard(self, guard_id: int) -> bool:
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("DELETE FROM school_guard_assignments WHERE guard_id = ?;", (guard_id,))
             cursor.execute("DELETE FROM guards WHERE guard_id = ?;", (guard_id,))
             conn.commit()
             success = cursor.rowcount > 0

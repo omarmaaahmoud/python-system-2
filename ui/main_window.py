@@ -210,13 +210,13 @@ class MainWindow(QMainWindow):
             self.btn_sys1.setChecked(True)
             self.btn_sys2.setChecked(False)
             self.setWindowTitle(f"{APP_NAME} - {APP_SUBTITLE}")
+            self.on_data_updated()
         else:
             self.btn_sys1.setChecked(False)
             self.btn_sys2.setChecked(True)
             self.setWindowTitle("منظومة إدارة تأمين المدارس وحراس الأمن — مديرية التربية والتعليم بالإسكندرية")
-            # Refresh System 2 dashboard
-            if hasattr(self.system2_widget, "dashboard_view"):
-                self.system2_widget.dashboard_view.load_data()
+            if hasattr(self.system2_widget, "on_data_updated"):
+                self.system2_widget.on_data_updated()
 
     def _make_nav_button(self, object_name: str, text: str) -> QPushButton:
         """Create a sidebar navigation button with proper objectName for QSS styling."""

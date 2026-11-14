@@ -90,6 +90,24 @@ class ReportsView(QWidget):
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table, 1)
 
+    def refresh_combos(self):
+        current_adm = self.combo_admin.currentData() or ""
+        self.combo_admin.blockSignals(True)
+        self.combo_admin.clear()
+        self.combo_admin.addItem("— كل الإدارات —", "")
+        for adm in self.school_service.get_administrations():
+            self.combo_admin.addItem(adm, adm)
+        idx = self.combo_admin.findData(current_adm)
+        if idx >= 0:
+            self.combo_admin.setCurrentIndex(idx)
+        else:
+            self.combo_admin.setCurrentIndex(0)
+        self.combo_admin.blockSignals(False)
+
+    def on_view_activated(self):
+        self.refresh_combos()
+        self.generate_selected_report()
+
     def generate_selected_report(self):
         rep_type = self.combo_report.currentData()
         adm = self.combo_admin.currentData() or ""
