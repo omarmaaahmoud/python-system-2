@@ -218,6 +218,13 @@ if Path("E:/").exists():
                 shutil.copy2(item, dest)
 
         print(f">>> Successfully deployed to {target_drive_e}!")
+        # Also copy the full ZIP archive to the root of the flash drive
+        try:
+            zip_on_e = Path("E:/") / zip_name
+            shutil.copy2(zip_path, zip_on_e)
+            print(f">>> Copied full ZIP package to flash drive root: {zip_on_e}")
+        except Exception as ez:
+            print(f">>> Could not copy ZIP to E root: {ez}")
     except Exception as e:
         print(f">>> Error deploying to E drive: {e}")
 else:
