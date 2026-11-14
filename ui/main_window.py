@@ -2,7 +2,7 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QStackedWidget, QFrame, QGridLayout, QScrollArea, 
-    QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy
+    QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy, QButtonGroup
 )
 from PySide6.QtGui import QIcon, QPixmap
 from datetime import datetime
@@ -16,6 +16,10 @@ from ui.search_view import AdvancedSearchView
 from ui.duplicate_names_view import DuplicateNamesView
 from ui.import_dialog import ExcelImportDialog
 from ui.smart_scan_dialog import SmartScanDialog
+
+# System 2 Integration
+from school_security.database import SchoolSecurityDatabaseManager
+from school_security.ui.main_view import SchoolSecurityMainView
 
 
 class ClickableCard(QFrame):
@@ -32,13 +36,15 @@ class ClickableCard(QFrame):
 
 
 class MainWindow(QMainWindow):
-    """Main Application Window with Dashboard, Sidebar Navigation, and Dynamic Subviews."""
-    def __init__(self, db_manager: DatabaseManager):
+    """Main Application Window with Top-Level System Switcher, Dashboard, Sidebar Navigation, and Dynamic Subviews."""
+    def __init__(self, db_manager: DatabaseManager, school_security_db: Optional[SchoolSecurityDatabaseManager] = None):
         super().__init__()
         self.db = db_manager
+        self.school_security_db = school_security_db or SchoolSecurityDatabaseManager()
+
         self.setWindowTitle(f"{APP_NAME} - {APP_SUBTITLE}")
-        self.resize(1280, 800)
-        self.setMinimumSize(1050, 680)
+        self.resize(1340, 840)
+        self.setMinimumSize(1080, 700)
         self.setLayoutDirection(Qt.RightToLeft)
 
         if LOGO_PATH.exists():
@@ -48,17 +54,32 @@ class MainWindow(QMainWindow):
         self.refresh_dashboard_stats()
 
     def init_ui(self):
-        # Central Main Widget
+        # Central Main Widget with Top-Level Vertical Layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        root_layout = QHBoxLayout(central_widget)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
+        main_vbox = QVBoxLayout(central_widget)
+        main_vbox.setContentsMargins(0, 0, 0, 0)
+        main_vbox.setSpacing(0)
+
+        # 1. Top-Level Dual-System Switcher Bar
+        self.top_system_bar = self.create_system_switcher_bar()
+        main_vbox.addWidget(self.top_system_bar)
+
+        # 2. Master Stacked Widget for System 1 and System 2
+        self.master_system_stack = QStackedWidget()
+
+        # ========================================================
+        # SYSTEM 1: Exclusions & Prisoners System Container
+        # ========================================================
+        self.system1_widget = QWidget()
+        s1_layout = QHBoxLayout(self.system1_widget)
+        s1_layout.setContentsMargins(0, 0, 0, 0)
+        s1_layout.setSpacing(0)
 
         # 1. Sidebar Navigation
         self.sidebar = self.create_sidebar()
-        root_layout.addWidget(self.sidebar)
+        s1_layout.addWidget(self.sidebar)
 
         # 2. Main Content Area (Header + QStackedWidget)
         content_container = QWidget()
@@ -95,7 +116,107 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.duplicates_view)   # Index 5
 
         content_layout.addWidget(self.stack, 1)
-        root_layout.addWidget(content_container, 1)
+        s1_layout.addWidget(content_container, 1)
+
+        # ========================================================
+        # SYSTEM 2: School Security Management System Container
+        # ========================================================
+        self.system2_widget = SchoolSecurityMainView(self.school_security_db, parent=self)
+
+        # Add both systems to Master Stack
+        self.master_system_stack.addWidget(self.system1_widget)  # Index 0
+        self.master_system_stack.addWidget(self.system2_widget)  # Index 1
+
+        main_vbox.addWidget(self.master_system_stack, 1)
+
+    def create_system_switcher_bar(self) -> QWidget:
+        """Top-level selector bar allowing seamless switching between both independent systems."""
+        bar = QFrame()
+        bar.setObjectName("TopSystemSwitcherBar")
+        bar.setFixedHeight(54)
+        bar.setStyleSheet("""
+            QFrame#TopSystemSwitcherBar {
+                background-color: #0F172A;
+                border-bottom: 2px solid #1E293B;
+            }
+            QPushButton.SystemTabBtn {
+                font-family: 'Segoe UI', Tahoma, sans-serif;
+                font-size: 13px;
+                font-weight: 700;
+                padding: 10px 24px;
+                border-radius: 8px 8px 0 0;
+                border: none;
+                margin-top: 6px;
+                margin-right: 4px;
+            }
+            QPushButton.SystemTabBtn:checked {
+                background-color: #1E40AF;
+                color: #FFFFFF;
+                border-bottom: 3px solid #F59E0B;
+            }
+            QPushButton.SystemTabBtn:!checked {
+                background-color: transparent;
+                color: #94A3B8;
+            }
+            QPushButton.SystemTabBtn:!checked:hover {
+                background-color: rgba(255, 255, 255, 0.08);
+                color: #F1F5F9;
+            }
+        """)
+
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(16, 0, 16, 0)
+        layout.setSpacing(8)
+
+        # Directorate & Unified Portal Emblem Title
+        left_h = QHBoxLayout()
+        left_h.setSpacing(8)
+
+        emblem_lbl = QLabel("🏛️  مديرية التربية والتعليم بالإسكندرية  |  المنظومة الرقمية الموحدة")
+        emblem_lbl.setStyleSheet("color: #FCD34D; font-weight: 700; font-size: 12px;")
+        left_h.addWidget(emblem_lbl)
+        layout.addLayout(left_h)
+
+        layout.addStretch()
+
+        # System Selector Tabs
+        tabs_h = QHBoxLayout()
+        tabs_h.setSpacing(6)
+
+        self.btn_sys1 = QPushButton("🏛️  بيانات المستبعدين والمسجونين")
+        self.btn_sys1.setProperty("class", "SystemTabBtn")
+        self.btn_sys1.setCheckable(True)
+        self.btn_sys1.setChecked(True)
+        self.btn_sys1.setCursor(Qt.PointingHandCursor)
+        self.btn_sys1.clicked.connect(lambda: self.switch_system(0))
+        tabs_h.addWidget(self.btn_sys1)
+
+        self.btn_sys2 = QPushButton("🏫  منظومة تأمين المدارس وحراس الأمن")
+        self.btn_sys2.setProperty("class", "SystemTabBtn")
+        self.btn_sys2.setCheckable(True)
+        self.btn_sys2.setChecked(False)
+        self.btn_sys2.setCursor(Qt.PointingHandCursor)
+        self.btn_sys2.clicked.connect(lambda: self.switch_system(1))
+        tabs_h.addWidget(self.btn_sys2)
+
+        layout.addLayout(tabs_h)
+
+        return bar
+
+    def switch_system(self, system_index: int):
+        """Switch between System 1 (Exclusions/Prisoners) and System 2 (School Security)."""
+        self.master_system_stack.setCurrentIndex(system_index)
+        if system_index == 0:
+            self.btn_sys1.setChecked(True)
+            self.btn_sys2.setChecked(False)
+            self.setWindowTitle(f"{APP_NAME} - {APP_SUBTITLE}")
+        else:
+            self.btn_sys1.setChecked(False)
+            self.btn_sys2.setChecked(True)
+            self.setWindowTitle("منظومة إدارة تأمين المدارس وحراس الأمن — مديرية التربية والتعليم بالإسكندرية")
+            # Refresh System 2 dashboard
+            if hasattr(self.system2_widget, "dashboard_view"):
+                self.system2_widget.dashboard_view.load_data()
 
     def _make_nav_button(self, object_name: str, text: str) -> QPushButton:
         """Create a sidebar navigation button with proper objectName for QSS styling."""

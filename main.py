@@ -16,6 +16,7 @@ from PySide6.QtGui import QFont, QIcon
 
 from config import APP_NAME, APP_SUBTITLE, LOGO_PATH, BASE_DIR
 from database import DatabaseManager
+from school_security.database import SchoolSecurityDatabaseManager
 from ui.styles import MAIN_STYLESHEET
 from ui.main_window import MainWindow
 
@@ -62,11 +63,12 @@ def main():
     font.setStyleHint(QFont.SansSerif)
     app.setFont(font)
 
-    # Initialize SQLite Database & Relational Schema
+    # Initialize SQLite Databases
     db_manager = DatabaseManager()
+    school_security_db = SchoolSecurityDatabaseManager()
 
-    # Launch Main Dashboard Window
-    window = MainWindow(db_manager)
+    # Launch Main Dashboard Window (Unified Dual-System)
+    window = MainWindow(db_manager, school_security_db)
     window.show()
 
     sys.exit(app.exec())

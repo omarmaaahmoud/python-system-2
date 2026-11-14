@@ -17,6 +17,7 @@ DIST_DIR = BASE_DIR / "dist"
 BUILD_DIR = BASE_DIR / "build"
 ASSETS_DIR = BASE_DIR / "assets"
 DATA_DIR = BASE_DIR / "data"
+
 # Kill any running instance of the application to prevent file locking
 try:
     subprocess.run(["powershell", "-Command", "Stop-Process -Name 'ExclusionsAndPrisonersSystem' -Force -ErrorAction SilentlyContinue"], capture_output=True)
@@ -43,6 +44,27 @@ cmd = [
     "--hidden-import=openpyxl",
     "--hidden-import=sqlite3",
     "--hidden-import=PySide6",
+    "--hidden-import=school_security",
+    "--hidden-import=school_security.database",
+    "--hidden-import=school_security.models",
+    "--hidden-import=school_security.config",
+    "--hidden-import=school_security.services",
+    "--hidden-import=school_security.services.school_service",
+    "--hidden-import=school_security.services.guard_service",
+    "--hidden-import=school_security.services.excel_importer",
+    "--hidden-import=school_security.services.excel_exporter",
+    "--hidden-import=school_security.services.import_worker",
+    "--hidden-import=school_security.ui",
+    "--hidden-import=school_security.ui.main_view",
+    "--hidden-import=school_security.ui.dashboard_view",
+    "--hidden-import=school_security.ui.schools_view",
+    "--hidden-import=school_security.ui.guards_view",
+    "--hidden-import=school_security.ui.advanced_search_view",
+    "--hidden-import=school_security.ui.reports_view",
+    "--hidden-import=school_security.ui.school_dialog",
+    "--hidden-import=school_security.ui.guard_dialog",
+    "--hidden-import=school_security.ui.import_dialog",
+    "--hidden-import=school_security.ui.table_models",
     "--clean",
     "-y",
     "main.py"
@@ -58,10 +80,18 @@ print(">>> PyInstaller build succeeded!")
 out_folder = DIST_DIR / "ExclusionsAndPrisonersSystem"
 dest_data = out_folder / "data"
 dest_data.mkdir(exist_ok=True)
+
+# Copy System 1 database (exclusions_prisoners.db)
 db_src = DATA_DIR / "exclusions_prisoners.db"
 if db_src.exists():
     shutil.copy2(db_src, dest_data / "exclusions_prisoners.db")
-    print(">>> Database copied to output directory successfully.")
+    print(">>> System 1 database (exclusions_prisoners.db) copied to output directory.")
+
+# Copy System 2 database (school_security.db) if present
+ss_db_src = DATA_DIR / "school_security.db"
+if ss_db_src.exists():
+    shutil.copy2(ss_db_src, dest_data / "school_security.db")
+    print(">>> System 2 database (school_security.db) copied to output directory.")
 
 dest_assets = out_folder / "assets"
 dest_assets.mkdir(exist_ok=True)
@@ -77,15 +107,19 @@ for item in ASSETS_DIR.glob("*"):
 # Create Arabic README instructions inside the package
 readme_content = """============================================================
 نظام بيانات المستبعدين والمسجونين — مديرية التربية والتعليم
+منظومة إدارة تأمين المدارس وحراس الأمن
 ============================================================
 
 طريقة تشغيل البرنامج:
 1. اضغط مرتين على ملف: ExclusionsAndPrisonersSystem.exe
 2. سيعمل البرنامج مباشرة دون الحاجة لتثبيت أي برامج إضافية (بما فيها Python).
 3. جميع البيانات والتعديلات تُحفظ تلقائياً في مجلد data المرفق.
+4. يتيح البرنامج التبديل بين النظامين من شريط التنقل العلوي.
 
 ملاحظة هامة:
 • لا تقم بحذف مجلد _internal أو مجلد data لضمان استمرار عمل البرنامج وحفظ بياناتك.
+• قاعدة بيانات النظام الأول: data/exclusions_prisoners.db
+• قاعدة بيانات النظام الثاني: data/school_security.db
 ============================================================
 """
 (out_folder / "تعليمات_التشغيل.txt").write_text(readme_content, encoding="utf-8")
@@ -144,18 +178,29 @@ if Path("E:/").exists():
     try:
         print(f">>> Deploying build to {target_drive_e} ...")
         target_drive_e.mkdir(parents=True, exist_ok=True)
-        
-        existing_db = target_drive_e / "data" / "exclusions_prisoners.db"
-        has_target_db = existing_db.exists() and existing_db.stat().st_size > 0
-        
+
+        # Preserve System 1 database
+        existing_db1 = target_drive_e / "data" / "exclusions_prisoners.db"
+        has_live_db1 = existing_db1.exists() and existing_db1.stat().st_size > 0
+
+        # Preserve System 2 database
+        existing_db2 = target_drive_e / "data" / "school_security.db"
+        has_live_db2 = existing_db2.exists() and existing_db2.stat().st_size > 0
+
+        preserved_dbs = []
+        if has_live_db1:
+            preserved_dbs.append("exclusions_prisoners.db")
+        if has_live_db2:
+            preserved_dbs.append("school_security.db")
+
         for item in out_folder.iterdir():
             dest = target_drive_e / item.name
             if item.is_dir():
-                if item.name == "data" and has_target_db:
-                    print(">>> Preserving existing live database at E:\\ExclusionsAndPrisonersSystem\\data\\exclusions_prisoners.db")
+                if item.name == "data" and preserved_dbs:
+                    print(f">>> Preserving existing live database(s): {', '.join(preserved_dbs)}")
                     dest.mkdir(exist_ok=True)
                     for f in item.iterdir():
-                        if f.name != "exclusions_prisoners.db":
+                        if f.name not in preserved_dbs:
                             shutil.copy2(f, dest / f.name)
                 else:
                     if dest.exists():
@@ -163,7 +208,7 @@ if Path("E:/").exists():
                     shutil.copytree(item, dest)
             else:
                 shutil.copy2(item, dest)
-                
+
         print(f">>> Successfully deployed to {target_drive_e}!")
     except Exception as e:
         print(f">>> Error deploying to E drive: {e}")
