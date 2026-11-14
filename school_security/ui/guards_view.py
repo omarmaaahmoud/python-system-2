@@ -216,6 +216,7 @@ class GuardsView(QWidget):
     def open_add_dialog(self):
         dlg = GuardDialog(self.guard_service, self.school_service, parent=self)
         dlg.data_saved.connect(self.on_data_updated)
+        dlg.data_saved.connect(self.data_changed.emit)
         dlg.exec()
 
     def open_edit_dialog(self):
@@ -225,6 +226,7 @@ class GuardsView(QWidget):
             return
         dlg = GuardDialog(self.guard_service, self.school_service, guard_id=guard["guard_id"], parent=self)
         dlg.data_saved.connect(self.on_data_updated)
+        dlg.data_saved.connect(self.data_changed.emit)
         dlg.exec()
 
     def check_duplicates(self):
@@ -252,12 +254,12 @@ class GuardsView(QWidget):
         if reply == QMessageBox.Yes:
             self.guard_service.delete_guard(guard["guard_id"])
             self.on_data_updated()
+            self.data_changed.emit()
             QMessageBox.information(self, "تم الحذف", f"تم حذف الحارس «{name}» بنجاح.")
 
     def on_data_updated(self):
         self.refresh_combos()
         self.load_data()
-        self.data_changed.emit()
 
     def export_to_excel(self):
         query = self.txt_search.text().strip()

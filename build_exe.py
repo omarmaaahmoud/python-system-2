@@ -171,7 +171,7 @@ $sc.WorkingDirectory = '{out_folder}'
 $sc.IconLocation = '{ICON_PATH},0'
 $sc.Save()
 """
-        subprocess.run(["powershell", "-Command", ps_code], check=True)
+        subprocess.run(["powershell", "-Command", ps_code], check=False)
         if temp_lnk.exists():
             if final_lnk.exists():
                 final_lnk.unlink()

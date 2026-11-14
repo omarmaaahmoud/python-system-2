@@ -194,6 +194,7 @@ class SchoolsView(QWidget):
     def open_add_dialog(self):
         dlg = SchoolDialog(self.school_service, self.guard_service, parent=self)
         dlg.data_saved.connect(self.on_data_updated)
+        dlg.data_saved.connect(self.data_changed.emit)
         dlg.exec()
 
     def open_edit_dialog(self):
@@ -203,6 +204,7 @@ class SchoolsView(QWidget):
             return
         dlg = SchoolDialog(self.school_service, self.guard_service, school_id=school["school_id"], parent=self)
         dlg.data_saved.connect(self.on_data_updated)
+        dlg.data_saved.connect(self.data_changed.emit)
         dlg.exec()
 
     def open_details_dialog(self):
@@ -230,12 +232,12 @@ class SchoolsView(QWidget):
         if reply == QMessageBox.Yes:
             self.school_service.delete_school(school["school_id"])
             self.on_data_updated()
+            self.data_changed.emit()
             QMessageBox.information(self, "تم الحذف", f"تم حذف مدرسة «{name}» بنجاح.")
 
     def on_data_updated(self):
         self.refresh_combos()
         self.load_data()
-        self.data_changed.emit()
 
     def export_to_excel(self):
         query = self.txt_search.text().strip()
