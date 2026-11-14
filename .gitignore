@@ -1,0 +1,38 @@
+# Sensitive data and keys
+*api_key*
+*.key
+*.pem
+*backup*
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# PyInstaller build outputs
+build/
+dist/
+*.exe
+
+# Database temporary WAL files
+*.db-wal
+*.db-shm
+
+# Log and temporary files
+*.log
+error_log.txt
+*.tmp
+*.bak
+scratch_*.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE files
+.vscode/
+.idea/

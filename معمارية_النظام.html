@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>معمارية نظام بيانات المستبعدين والمسجونين — مديرية التربية والتعليم</title>
+    <!-- Google Fonts: Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Mermaid CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --primary: #1E3A8A;
+            --primary-light: #2563EB;
+            --accent: #F59E0B;
+            --bg: #F8FAFC;
+            --surface: #FFFFFF;
+            --text-main: #0F172A;
+            --text-muted: #64748B;
+            --border: #E2E8F0;
+        }
+        * {
+            box-sizing: border-box;
+            font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 30px 20px;
+            direction: rtl;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header-card {
+            background: linear-gradient(135deg, #1E3A8A 0%, #172554 100%);
+            color: white;
+            padding: 35px 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(30, 58, 138, 0.25);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .header-text h1 {
+            margin: 0 0 8px 0;
+            font-size: 26px;
+            font-weight: 800;
+        }
+        .header-text p {
+            margin: 0;
+            color: #93C5FD;
+            font-size: 15px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            background-color: #2563EB;
+            color: white;
+            border: none;
+            padding: 12px 22px;
+            font-size: 14px;
+            font-weight: 700;
+            border-radius: 10px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+        .btn:hover {
+            background-color: #1D4ED8;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+        }
+        .btn-gold {
+            background-color: #D97706;
+        }
+        .btn-gold:hover {
+            background-color: #B45309;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 28px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03);
+        }
+        .card-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--primary);
+            margin: 0 0 16px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 2px solid #EFF6FF;
+            padding-bottom: 12px;
+        }
+        .diagram-container {
+            background: #FFFFFF;
+            border: 1.5px solid #CBD5E1;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+        .layer-box {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            background: #F8FAFC;
+            border-right: 5px solid var(--primary-light);
+        }
+        .layer-box h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #1E293B;
+        }
+        .layer-box ul {
+            margin: 0;
+            padding-right: 20px;
+            font-size: 13.5px;
+            color: #475569;
+            line-height: 1.8;
+        }
+        pre {
+            background: #0F172A;
+            color: #F8FAFC;
+            padding: 18px;
+            border-radius: 10px;
+            direction: ltr;
+            text-align: left;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .toast {
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0F172A;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        @media print {
+            body { padding: 0; background: white; }
+            .btn-group { display: none; }
+            .card { box-shadow: none; border: 1px solid #ccc; page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header -->
+    <div class="header-card">
+        <div class="header-text">
+            <h1>🏛️ المعمارية البرمجية والهيكل الفني لنظام البيانات</h1>
+            <p>نظام بيانات المستبعدين والمسجونين — مديرية التربية والتعليم بالإسكندرية</p>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-gold" onclick="window.print()">🖨️ طباعة / حفظ كـ PDF</button>
+            <button class="btn" onclick="copyDiagramCode()">📋 نسخ كود المخطط</button>
+        </div>
+    </div>
+
+    <!-- Section 1: Main Architecture Diagram -->
+    <div class="card">
+        <h2 class="card-title">📐 مخطط معمارية النظام (System Architecture Diagram)</h2>
+        <p style="color: var(--text-muted); font-size: 14px; margin-top: -5px;">
+            يوضح هذا المخطط تسلسل الطبقات من واجهة المستخدم، النماذج الافتراضية، خيوط المعالجة الخلفية، وصولاً لقاعدة بيانات SQLite.
+        </p>
+        
+        <div class="diagram-container">
+            <pre class="mermaid" id="mainMermaid">
+flowchart TD
+    subgraph UI_Layer["🖥️ طبقة الواجهة الرسومية (Presentation Layer - PySide6)"]
+        MW["MainWindow (لوحة التحكم المركزية)"]
+        subgraph Subviews["الصفحات الفرعية (QStackedWidget)"]
+            V0["DashboardView\nلوحة المؤشرات والـ KPIs"]
+            V1["ExcludedView\nسجلات المستبعدين"]
+            V2["PrisonersView\nسجلات المسجونين"]
+            V3["ManageCaseTypesView\nإدارة أنواع القضايا"]
+            V4["AdvancedSearchView\nالبحث المتقدم الشامل"]
+            V5["DuplicateNamesView\nفحص الأسماء المتشابهة"]
+        end
+        subgraph Dialogs["نوافذ العمليات والإدخال"]
+            D1["RecordDialog\nإضافة وتعديل السجلات"]
+            D2["ExcelImportDialog\nاستيراد الإكسيل"]
+            D3["SmartScanDialog\nالمسح الضوئي الذكي (OCR)"]
+        end
+    end
+
+    subgraph Model_Layer["⚡ طبقة النماذج الافتراضية (Qt Virtualized Models)"]
+        M1["ExcludedTableModel\n(QAbstractTableModel)"]
+        M2["PrisonerTableModel\n(QAbstractTableModel)"]
+        M3["AdvancedSearchTableModel\n(QAbstractTableModel)"]
+    end
+
+    subgraph Service_Layer["⚙️ طبقة الخدمات والمعالجة الخلفية (Service Layer)"]
+        IM["ExcelImporter & Worker\n(استيراد الإكسيل في خيط خلفي QThread)"]
+        EX["ExcelExporter\n(تصدير الجداول والتقارير)"]
+        OCR["AIVisionExtractor\n(محرك استخراج النصوص بالذكاء الاصطناعي)"]
+    end
+
+    subgraph DAL["💾 طبقة الوصول للبيانات (Data Access Layer - DAL)"]
+        DM["DatabaseManager\n(فئة إدارة قاعدة البيانات)"]
+        NORM["دالة المطابقة والبحث العربي\nnormalize_arabic()"]
+    end
+
+    subgraph Storage["📁 طبقة التخزين والحفظ (Storage Layer)"]
+        DB[("exclusions_prisoners.db\nقاعدة بيانات SQLite (WAL Mode)")]
+    end
+
+    MW --> Subviews
+    Subviews -.-> Dialogs
+    V1 --> M1
+    V2 --> M2
+    V4 --> M3
+
+    M1 & M2 & M3 & Subviews --> DM
+    D2 --> IM --> DM
+    D3 --> OCR
+    Subviews --> EX
+
+    DM --> NORM
+    DM --> DB
+            </pre>
+        </div>
+    </div>
+
+    <!-- Section 2: Layers Explanation -->
+    <div class="card">
+        <h2 class="card-title">🧩 تفصيل طبقات المنظومة البرمجية</h2>
+        <div class="grid-2">
+            <div class="layer-box" style="border-right-color: #2563EB;">
+                <h3>1. طبقة الواجهة (UI Presentation)</h3>
+                <ul>
+                    <li>مبنية باستخدام <strong>PySide6 (Qt6)</strong> مع محاذاة أصلية <strong>RTL</strong>.</li>
+                    <li>إدارة الشاشات عبر <code>QStackedWidget</code> لضمان سرعة الانتقال بين الشاشات الـ 6 بدون إعادة بناء النوافذ.</li>
+                    <li>سمة مخصصة (Custom QSS) بألوان رسمية وخطوط واضحة.</li>
+                </ul>
+            </div>
+
+            <div class="layer-box" style="border-right-color: #10B981;">
+                <h3>2. النماذج الافتراضية (Virtual Models)</h3>
+                <ul>
+                    <li>الاعتماد على كلاس <code>QAbstractTableModel</code> المخصص بدلاً من الجداول التقليدية.</li>
+                    <li>تقنية <strong>Virtual Scrolling</strong> لرسم الصفوف الظاهرة فقط على الشاشة.</li>
+                    <li>تصفح وسرعة فائقة حتى مع وجود عشرات الآلاف من السجلات دون أي استهلاك للذاكرة.</li>
+                </ul>
+            </div>
+
+            <div class="layer-box" style="border-right-color: #F59E0B;">
+                <h3>3. الخدمات والخيوط الخلفية (Services & QThread)</h3>
+                <ul>
+                    <li>محرك استيراد الإكسيل يعمل بالكامل على خيط خلفي <code>QThread</code> لمنع تجميد الواجهة.</li>
+                    <li>فحص ومطابقة آلية للأعمدة وتدقيق الأرقام القومية.</li>
+                    <li>محرك مسح ضوئي ذكي <code>AIVisionExtractor</code> لقراءة القرارات الورقية.</li>
+                </ul>
+            </div>
+
+            <div class="layer-box" style="border-right-color: #8B5CF6;">
+                <h3>4. قاعدة البيانات والأمان العلائقي (DAL & SQLite)</h3>
+                <ul>
+                    <li>تفعيل نمط <strong>WAL (Write-Ahead Logging)</strong> لأقصى سرعة قراءة وكتابة متزامنة.</li>
+                    <li>تفعيل المفاتيح الأجنبية <code>PRAGMA foreign_keys = ON;</code> والحذف التسلسلي.</li>
+                    <li>دالة مخصصة <code>normalize_arabic</code> للبحث الذكي الذي يتجاوز أخطاء الهمزات والياء والألفات.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 3: ERD Diagram -->
+    <div class="card">
+        <h2 class="card-title">🗄️ المخطط العلائقي لقاعدة البيانات (Database ERD)</h2>
+        <div class="diagram-container">
+            <pre class="mermaid">
+erDiagram
+    Employees ||--o{ ExcludedRecords : "يملك قرارات استبعاد"
+    Employees ||--o{ PrisonerRecords : "يملك قضايا وأحكام"
+    Administrations ||--o{ Employees : "يتبع إدارة تعليمية"
+    CaseTypes ||--o{ ExcludedRecords : "يصنف حسب نوع القضية"
+    CaseTypes ||--o{ PrisonerRecords : "يصنف حسب نوع التهمة"
+
+    Employees {
+        INTEGER id PK
+        TEXT full_name "اسم الموظف"
+        TEXT national_id "الرقم القومي (فريد)"
+        INTEGER administration_id FK "الإدارة التعليمية"
+        TEXT school "المدرسة / مقر العمل"
+        TEXT phone "رقم الهاتف"
+    }
+
+    ExcludedRecords {
+        INTEGER id PK
+        INTEGER employee_id FK
+        INTEGER record_number "رقم المسلسل"
+        TEXT exclusion_decision "قرار الاستبعاد"
+        TEXT alternative_job "الوظيفة البديلة"
+        TEXT address "العنوان الحالي"
+        INTEGER case_type_id FK "نوع القضية"
+        TEXT notes "الملاحظات"
+    }
+
+    PrisonerRecords {
+        INTEGER id PK
+        INTEGER employee_id FK
+        INTEGER record_number "رقم المسلسل"
+        TEXT case_number "رقم القضية"
+        INTEGER case_type_id FK "نوع التهمة"
+        TEXT legal_action "الإجراء القانوني"
+        TEXT sentence_duration "مدة العقوبة"
+        TEXT imprisonment_date "تاريخ الحبس"
+        TEXT release_date "تاريخ الإفراج"
+        TEXT current_status "الموقف الحالي"
+        TEXT job_status "الموقف الوظيفي"
+    }
+
+    Administrations {
+        INTEGER id PK
+        TEXT name "اسم الإدارة"
+    }
+
+    CaseTypes {
+        INTEGER id PK
+        TEXT name "نوع القضية / المخالفة"
+    }
+            </pre>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast">✅ تم نسخ كود المخطط إلى الحافظة بنجاح!</div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'default',
+        flowchart: { curve: 'basis' }
+    });
+
+    function copyDiagramCode() {
+        const code = document.getElementById('mainMermaid').innerText;
+        navigator.clipboard.writeText(code).then(() => {
+            const toast = document.getElementById('toast');
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        });
+    }
+</script>
+</body>
+</html>
+
