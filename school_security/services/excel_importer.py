@@ -86,10 +86,14 @@ def match_school_column(header_text: str) -> str:
         return "manager_phone"
     if "مدير" in h:
         return "manager_name"
-    if ("مسئول" in h or "مسؤول" in h) and any(p in h for p in ("تليفون", "هاتف", "موبايل", "رقم")):
+    if ("مسئول" in h or "مسؤول" in h or "امن" in h or "أمن" in h) and any(p in h for p in ("تليفون", "هاتف", "موبايل", "رقم")):
         return "security_officer_phone"
     if "مسئول" in h or "مسؤول" in h:
         return "security_officer_name"
+
+    # Generic phone/telephone (will be contextually resolved in _find_header_row)
+    if any(p in h for p in ("تليفون", "هاتف", "موبايل", "جوال")):
+        return "generic_phone"
 
     # Cameras
     if any(w in h for w in ("كاميرات تعمل", "الكاميرات التي تعمل", "الكاميرات التى تعمل")) and "لا" not in h:
@@ -128,10 +132,8 @@ def match_school_column(header_text: str) -> str:
         return "classrooms_count"
     if "بوابات" in h:
         return "gates_count"
-    if "تبعيه" in h or "نوع المدرسه" in h:
+    if "تبعيه" in h or "نوع المدرسه" in h or "حكومي" in h or "خاص" in h:
         return "affiliation"
-    if "تليفون" in h or "هاتف" in h:
-        return "manager_phone"
     if "مدرسه" in h and "مدير" not in h and "مسئول" not in h:
         return "school_name"
     if "اداره" in h or "إدارة" in h or "متزه" in h or "منتزه" in h:
@@ -152,14 +154,14 @@ def match_guard_column(header_text: str) -> str:
         return "national_id"
     if any(w in h for w in ("هاتف", "تليفون", "موبايل", "جوال")):
         return "phone"
-    if any(w in h for w in ("حارس", "عمال", "فرد", "عامل")):
-        return "guard_name"
     if any(w in h for w in ("عنوان", "مقر", "مكان")):
         return "address"
     if "مدرسه" in h:
         return "school_name"
     if "اداره" in h or "إدارة" in h or "متزه" in h or "منتزه" in h:
         return "administration"
+    if any(w in h for w in ("حارس", "عمال", "فرد", "عامل", "اسم", "الاسم")):
+        return "guard_name"
 
     return ""
 
@@ -200,14 +202,37 @@ class SchoolSecurityExcelImporter:
         for r_idx, row in enumerate(ws.iter_rows(max_row=max_scan, values_only=True), start=1):
             current_mapping = {}
             matches_count = 0
+            seen_manager_name = False
+            seen_manager_phone = False
+            seen_sec_officer = False
+
             for col_idx, cell in enumerate(row):
                 cell_text = clean_cell_text(cell)
                 if not cell_text:
                     continue
                 matched_key = matcher(cell_text)
-                if matched_key and matched_key != "serial":
-                    current_mapping[col_idx] = matched_key
-                    matches_count += 1
+                if not matched_key or matched_key == "serial":
+                    continue
+
+                if sheet_type == "school":
+                    if matched_key == "manager_name":
+                        seen_manager_name = True
+                    elif matched_key == "manager_phone":
+                        seen_manager_phone = True
+                    elif matched_key == "security_officer_name":
+                        seen_sec_officer = True
+                    elif matched_key == "security_officer_phone":
+                        pass
+                    elif matched_key == "generic_phone":
+                        # Disambiguate generic phone: if manager phone already seen or sec officer seen
+                        if seen_sec_officer or seen_manager_phone:
+                            matched_key = "security_officer_phone"
+                        else:
+                            matched_key = "manager_phone"
+                            seen_manager_phone = True
+
+                current_mapping[col_idx] = matched_key
+                matches_count += 1
 
             if matches_count > max_matches:
                 max_matches = matches_count

@@ -166,6 +166,34 @@ class ExcelImportDialog(QDialog):
             "Excel Files (*.xlsx *.xls *.xlsb);;All Files (*.*)"
         )
         if file_path:
+            # Cross-system detection: check if this file belongs to School Security (System 2)
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                sheet_names_lower = [s.strip().lower() for s in wb.sheetnames]
+                wb.close()
+
+                is_security_file = False
+                for s in wb.sheetnames:
+                    normalized = s.strip()
+                    if any(kw in normalized for kw in ("تامين", "تأمين", "حراس", "حراسه", "حراسة")):
+                        is_security_file = True
+                        break
+
+                if is_security_file:
+                    QMessageBox.information(
+                        self,
+                        "💡 تنبيه: ملف خاص بمنظومة تأمين المدارس",
+                        "هذا الملف يحتوي على بيانات تأمين المدارس وحراس الأمن.\n\n"
+                        "يرجى الانتقال إلى:\n"
+                        "🏫 منظومة تأمين المدارس وحراس الأمن\n"
+                        "من الشريط العلوي للتطبيق، ثم استخدام أداة الاستيراد هناك.\n\n"
+                        "هذه المنظومة (بيانات المستبعدين والمسجونين) مخصصة لملفات الاستبعاد والسجن فقط."
+                    )
+                    return
+            except Exception:
+                pass  # If detection fails, proceed normally
+
             self.selected_file_path = file_path
             self.file_path_label.setText(Path(file_path).name)
             self.file_path_label.setStyleSheet("color: #0F172A; font-weight: bold; border: 1px solid #93C5FD; padding: 8px; border-radius: 6px; background: #EFF6FF;")

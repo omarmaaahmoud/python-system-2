@@ -22,6 +22,7 @@ from ..services.guard_service import GuardService
 from ..services.excel_exporter import SchoolSecurityExcelExporter
 from .table_models import SchoolTableModel
 from .school_dialog import SchoolDialog
+from .import_dialog import SchoolSecurityImportDialog
 
 
 class SchoolsView(QWidget):
@@ -125,6 +126,13 @@ class SchoolsView(QWidget):
         self.btn_export.setMinimumHeight(38)
         self.btn_export.clicked.connect(self.export_to_excel)
         toolbar.addWidget(self.btn_export)
+
+        self.btn_import = QPushButton("📥 استيراد كشوف إكسيل")
+        self.btn_import.setObjectName("SecondaryBtn")
+        self.btn_import.setMinimumHeight(38)
+        self.btn_import.setStyleSheet("color: #1E40AF; font-weight: bold;")
+        self.btn_import.clicked.connect(self.open_import_dialog)
+        toolbar.addWidget(self.btn_import)
 
         layout.addLayout(toolbar)
 
@@ -278,3 +286,9 @@ class SchoolsView(QWidget):
         act_edit.triggered.connect(self.open_edit_dialog)
         act_delete.triggered.connect(self.delete_selected_school)
         menu.exec(self.table_view.viewport().mapToGlobal(pos))
+
+    def open_import_dialog(self):
+        dlg = SchoolSecurityImportDialog(self.school_service.db, parent=self)
+        dlg.import_completed.connect(self.on_data_updated)
+        dlg.exec()
+

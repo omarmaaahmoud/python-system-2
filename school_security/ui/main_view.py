@@ -233,9 +233,11 @@ class SchoolSecurityMainView(QWidget):
         dlg = SchoolDialog(self.school_service, self.guard_service, school_id=school_id, read_only=True, parent=self)
         dlg.exec()
 
-    def open_import_dialog(self):
+    def open_import_dialog(self, initial_file: Optional[str] = None):
         dlg = SchoolSecurityImportDialog(self.db, parent=self)
         dlg.import_completed.connect(self.on_data_updated)
+        if initial_file:
+            dlg.set_file_path(initial_file)
         dlg.exec()
 
     def on_data_updated(self):

@@ -132,6 +132,16 @@ class SchoolSecurityImportDialog(QDialog):
         btn_bar = QHBoxLayout()
         btn_bar.setSpacing(10)
 
+        self.btn_clear_reimport = QPushButton("🔄 مسح الكل وإعادة الاستيراد")
+        self.btn_clear_reimport.setObjectName("DangerBtn")
+        self.btn_clear_reimport.setMinimumHeight(40)
+        self.btn_clear_reimport.setEnabled(False)
+        self.btn_clear_reimport.setToolTip("مسح كافة سجلات المدارس والحراس الحالية وإعادة استيراد هذا الملف من الصفر")
+        self.btn_clear_reimport.clicked.connect(self.clear_and_reimport)
+        btn_bar.addWidget(self.btn_clear_reimport)
+
+        btn_bar.addStretch()
+
         self.btn_start = QPushButton("🚀 بدء عملية الاستيراد الآن")
         self.btn_start.setObjectName("PrimaryBtn")
         self.btn_start.setMinimumHeight(40)
@@ -147,6 +157,15 @@ class SchoolSecurityImportDialog(QDialog):
 
         layout.addLayout(btn_bar)
 
+    def set_file_path(self, file_path: str):
+        """Sets the selected file programmatically and previews it."""
+        if not file_path or not Path(file_path).exists():
+            return
+        self.selected_file = file_path
+        self.lbl_file.setText(Path(file_path).name)
+        self.lbl_file.setStyleSheet("color: #0F172A; font-weight: bold; background: #EFF6FF; border: 1.5px solid #3B82F6; padding: 8px 12px; border-radius: 6px;")
+        self._inspect_and_preview_file(file_path)
+
     def browse_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -157,10 +176,10 @@ class SchoolSecurityImportDialog(QDialog):
         if not file_path:
             return
 
-        self.selected_file = file_path
-        self.lbl_file.setText(Path(file_path).name)
-        self.lbl_file.setStyleSheet("color: #0F172A; font-weight: bold; background: #EFF6FF; border: 1.5px solid #3B82F6; padding: 8px 12px; border-radius: 6px;")
+        self.set_file_path(file_path)
 
+    def _inspect_and_preview_file(self, file_path: str):
+        self.log_area.clear()
         self.log_area.append(f"📁 تم اختيار الملف: {Path(file_path).name}")
         self.log_area.append("⏳ جاري استكشاف أوراق العمل ومطابقة الأعمدة...")
 
@@ -172,33 +191,67 @@ class SchoolSecurityImportDialog(QDialog):
             self.log_area.append(f"✅ تم التعرف على ورقة المدارس: «{sch_sheet}»")
             self.log_area.append(f"✅ تم التعرف على ورقة الحراس: «{grd_sheet}»")
 
-            schools_count = len(importer.parse_schools())
-            guards_count = len(importer.parse_guards())
+            schools = importer.parse_schools()
+            guards = importer.parse_guards()
+            schools_count = len(schools)
+            guards_count = len(guards)
 
             self.log_area.append(f"📊 عدد سجلات المدارس المكتشفة: {schools_count:,}")
             self.log_area.append(f"📊 عدد سجلات الحراس المكتشفة: {guards_count:,}")
 
+            if schools_count == 1 and guards_count == 1:
+                sch_name = schools[0].get("school_name", "")
+                grd_name = guards[0].get("guard_name", "")
+                self.log_area.append(f"💡 ملاحظة: الملف يحتوي على صف بيانات واحد مكتمل لمدرسة «{sch_name}» وحارس «{grd_name}»، بينما باقي الصفوف عبارة عن أرقام تسلسلية فارغة تم استثناؤها آلياً.")
+
             self.status_lbl.setText(f"جاهز للاستيراد: تم العثور على {schools_count} مدرسة و {guards_count} حارس.")
             self.btn_start.setEnabled(True)
+            self.btn_clear_reimport.setEnabled(True)
 
         except Exception as e:
             self.log_area.append(f"❌ خطأ أثناء قراءة الملف: {e}")
             QMessageBox.critical(self, "خطأ في قراءة الملف", f"تعذر قراءة ملف الإكسيل:\n{e}")
             self.btn_start.setEnabled(False)
+            self.btn_clear_reimport.setEnabled(False)
 
-    def start_import(self):
+    def clear_and_reimport(self):
         if not self.selected_file:
             return
 
-        mode = "add_and_update"
-        if self.rad_add_new.isChecked():
-            mode = "add_new"
-        elif self.rad_update_only.isChecked():
-            mode = "update_existing"
-        elif self.rad_skip_all.isChecked():
-            mode = "skip_duplicates"
+        reply = QMessageBox.warning(
+            self,
+            "تأكيد مسح البيانات وإعادة الاستيراد",
+            "هل أنت متأكد من رغبتك في مسح كافة سجلات المدارس والحراس الحالية نهائياً من قاعدة البيانات، ثم إعادة استيراد هذا الملف بالكامل من الصفر؟\n\nلا يمكن التراجع عن هذه الخطوة.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            self.db.clear_all_security_data()
+            self.log_area.append("🗑️ تم مسح كافة بيانات تأمين المدارس والحراس السابقة بنجاح.")
+            self.start_import(forced_mode="add_and_update")
+        except Exception as e:
+            QMessageBox.critical(self, "خطأ", f"فشل مسح البيانات السابقة:\n{e}")
+
+    def start_import(self, forced_mode: Optional[str] = None):
+        if not self.selected_file:
+            return
+
+        if forced_mode:
+            mode = forced_mode
+        else:
+            mode = "add_and_update"
+            if self.rad_add_new.isChecked():
+                mode = "add_new"
+            elif self.rad_update_only.isChecked():
+                mode = "update_existing"
+            elif self.rad_skip_all.isChecked():
+                mode = "skip_duplicates"
 
         self.btn_start.setEnabled(False)
+        self.btn_clear_reimport.setEnabled(False)
         self.btn_browse.setEnabled(False)
         self.progress_bar.setValue(5)
         self.status_lbl.setText("جاري تنفيذ الاستيراد والربط في الخلفية...")
@@ -218,6 +271,7 @@ class SchoolSecurityImportDialog(QDialog):
         self.progress_bar.setValue(100)
         self.status_lbl.setText("اكتمل الاستيراد بنجاح تام!")
         self.btn_start.setEnabled(True)
+        self.btn_clear_reimport.setEnabled(True)
         self.btn_browse.setEnabled(True)
 
         self.log_area.append("\n" + result.summary_message())
@@ -229,6 +283,7 @@ class SchoolSecurityImportDialog(QDialog):
         self.progress_bar.setValue(0)
         self.status_lbl.setText("فشلت عملية الاستيراد!")
         self.btn_start.setEnabled(True)
+        self.btn_clear_reimport.setEnabled(True)
         self.btn_browse.setEnabled(True)
         self.log_area.append(f"\n❌ خطأ فادح: {err_msg}")
         QMessageBox.critical(self, "فشل الاستيراد", f"حدث خطأ أثناء حفظ البيانات:\n{err_msg}")

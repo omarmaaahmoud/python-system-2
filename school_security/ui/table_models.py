@@ -92,7 +92,10 @@ class SchoolTableModel(QAbstractTableModel):
                 return str(index.row() + 1)
             if col == 21:
                 cnt = row_item.get("assigned_guards_count", 0)
-                return f"{cnt} حارس" if cnt else "لا يوجد"
+                names = str(row_item.get("guard_names_preview") or "").strip()
+                if names:
+                    return f"{names} ({cnt})" if cnt > 1 else names
+                return "لا يوجد"
             if not val_str or val_str in ("None", "nan", "NaN", "null"):
                 return "—"
             return val_str

@@ -90,7 +90,7 @@ class ImportResult:
     success: bool = True
 
     def summary_message(self) -> str:
-        return (
+        msg = (
             f"✅ اكتملت عملية الاستيراد والمعالجة بنجاح:\n\n"
             f"• المدارس: {self.schools_inserted:,} جديدة | {self.schools_updated:,} تم تحديثها | {self.schools_skipped:,} مستثناة\n"
             f"• الحراس: {self.guards_inserted:,} جدد | {self.guards_updated:,} تم تحديثهم | {self.guards_skipped:,} مستثنون\n"
@@ -98,4 +98,11 @@ class ImportResult:
             f"• حراس بدون مدرسة مطابقة: {self.unmatched_guards:,}\n"
             f"• الأخطاء والملاحظات: {len(self.errors):,}"
         )
+        if self.schools_inserted == 0 and self.guards_inserted == 0 and (self.schools_skipped > 0 or self.guards_skipped > 0):
+            msg += (
+                "\n\n💡 ملاحظة هامة: السجلات الموجودة في الملف مسجلة بالفعل مسبقاً في قاعدة البيانات ولذلك تم تخطي تكرارها."
+                "\nإذا كنت ترغب في إعادة حفظها من الصفر، يمكنك النقر على «مسح الكل وإعادة الاستيراد»."
+            )
+        return msg
+
 

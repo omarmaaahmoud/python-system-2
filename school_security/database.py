@@ -163,3 +163,20 @@ class SchoolSecurityDatabaseManager:
         except Exception as e:
             logger.error(f"Audit log error: {e}")
 
+    def clear_all_security_data(self):
+        """Safely clears all schools, guards, assignments, and audit logs."""
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM school_guard_assignments;")
+            cur.execute("DELETE FROM guards;")
+            cur.execute("DELETE FROM schools;")
+            cur.execute("DELETE FROM import_history;")
+            cur.execute("DELETE FROM audit_logs;")
+            try:
+                cur.execute("DELETE FROM sqlite_sequence WHERE name IN ('schools', 'guards', 'school_guard_assignments', 'import_history', 'audit_logs');")
+            except Exception:
+                pass
+            conn.commit()
+        logger.info("All school security data safely wiped for fresh import.")
+
+

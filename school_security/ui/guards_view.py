@@ -21,6 +21,7 @@ from ..services.school_service import SchoolService
 from ..services.excel_exporter import SchoolSecurityExcelExporter
 from .table_models import GuardTableModel
 from .guard_dialog import GuardDialog
+from .import_dialog import SchoolSecurityImportDialog
 
 
 class DuplicatesDialog(QDialog):
@@ -161,6 +162,13 @@ class GuardsView(QWidget):
         self.btn_export.clicked.connect(self.export_to_excel)
         toolbar.addWidget(self.btn_export)
 
+        self.btn_import = QPushButton("📥 استيراد كشوف إكسيل")
+        self.btn_import.setObjectName("SecondaryBtn")
+        self.btn_import.setMinimumHeight(38)
+        self.btn_import.setStyleSheet("color: #1E40AF; font-weight: bold;")
+        self.btn_import.clicked.connect(self.open_import_dialog)
+        toolbar.addWidget(self.btn_import)
+
         layout.addLayout(toolbar)
 
         # 3. Virtualized Table View
@@ -297,3 +305,9 @@ class GuardsView(QWidget):
         act_edit.triggered.connect(self.open_edit_dialog)
         act_delete.triggered.connect(self.delete_selected_guard)
         menu.exec(self.table_view.viewport().mapToGlobal(pos))
+
+    def open_import_dialog(self):
+        dlg = SchoolSecurityImportDialog(self.guard_service.db, parent=self)
+        dlg.import_completed.connect(self.on_data_updated)
+        dlg.exec()
+
