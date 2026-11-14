@@ -137,13 +137,21 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
 
 print(f">>> ZIP Archive created successfully: {zip_path.stat().st_size / (1024*1024):.1f} MB")
 
-# Locate user Desktop
-desktop = Path(os.environ.get("USERPROFILE", "")) / "OneDrive" / "Desktop"
-if not desktop.exists():
-    desktop = Path(os.environ.get("USERPROFILE", "")) / "Desktop"
+# Locate user Desktop safely
+desktop = None
+for candidate in [
+    Path(os.environ.get("USERPROFILE", "")) / "Desktop",
+    Path(os.environ.get("USERPROFILE", "")) / "OneDrive" / "Desktop"
+]:
+    try:
+        if candidate.exists():
+            desktop = candidate
+            break
+    except Exception:
+        pass
 
 # Copy ZIP to Desktop for immediate easy upload
-if desktop.exists():
+if desktop:
     try:
         shutil.copy2(zip_path, desktop / zip_name)
         print(">>> ZIP copied to Desktop ready for uploading!")

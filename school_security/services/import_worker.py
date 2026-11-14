@@ -3,6 +3,8 @@
 Asynchronous QThread worker for executing Excel import transactions.
 Ensures zero-freeze UI, real-time progress signals, and relational linking.
 """
+import re
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from PySide6.QtCore import QThread, Signal
 
@@ -34,7 +36,7 @@ class SchoolSecurityImportWorker(QThread):
     def run(self):
         result = ImportResult()
         try:
-            self.progress.emit(10, "جاري فتح وتحليل ورقات عمل ملف الإكسيل...")
+            self.progress.emit(10, "جاري فتح وتحليل ورقات عمل ملف الإكسيل ومطابقة الأعمدة...")
             importer = SchoolSecurityExcelImporter(self.file_path)
 
             if self._is_cancelled:
@@ -59,19 +61,18 @@ class SchoolSecurityImportWorker(QThread):
 
                 # Cache existing schools for quick linking and duplicate detection
                 existing_schools_rows = cursor.execute("""
-                    SELECT school_id, administration, school_name FROM schools;
+                    SELECT school_id, administration, school_name, manager_phone, security_officer_phone FROM schools;
                 """).fetchall()
 
-                # Mapping: (norm_admin, norm_school_name) -> school_id
-                schools_map = {}
-                schools_by_name = {}
+                schools_list: List[Dict[str, Any]] = []
                 for s in existing_schools_rows:
-                    sid = s["school_id"]
-                    n_adm = normalize_arabic(s["administration"])
-                    n_name = normalize_arabic(s["school_name"])
-                    if n_name:
-                        schools_map[(n_adm, n_name)] = sid
-                        schools_by_name[n_name] = sid
+                    schools_list.append({
+                        "school_id": s["school_id"],
+                        "admin_norm": normalize_arabic(s["administration"]),
+                        "school_norm": normalize_arabic(s["school_name"]),
+                        "mgr_phone": re.sub(r"[^\d]", "", str(s["manager_phone"] or "")),
+                        "sec_phone": re.sub(r"[^\d]", "", str(s["security_officer_phone"] or ""))
+                    })
 
                 # 1. Process Schools
                 school_keys = [
@@ -91,7 +92,18 @@ class SchoolSecurityImportWorker(QThread):
 
                     n_adm = normalize_arabic(s_rec["administration"])
                     n_name = normalize_arabic(s_rec["school_name"])
-                    existing_id = schools_map.get((n_adm, n_name)) or schools_by_name.get(n_name)
+
+                    # Match existing school
+                    existing_id = None
+                    for s_item in schools_list:
+                        if s_item["admin_norm"] == n_adm and s_item["school_norm"] == n_name:
+                            existing_id = s_item["school_id"]
+                            break
+                    if not existing_id:
+                        for s_item in schools_list:
+                            if s_item["school_norm"] == n_name and n_name:
+                                existing_id = s_item["school_id"]
+                                break
 
                     if existing_id:
                         if self.import_mode in ("update_existing", "add_and_update"):
@@ -99,7 +111,7 @@ class SchoolSecurityImportWorker(QThread):
                             update_vals = []
                             for k in school_keys:
                                 val = str(s_rec.get(k, "") or "").strip()
-                                if val:  # only update fields with incoming data
+                                if val:
                                     update_pairs.append(f"{k} = ?")
                                     update_vals.append(val)
                             if update_pairs:
@@ -119,14 +131,19 @@ class SchoolSecurityImportWorker(QThread):
                                 insert_vals
                             )
                             new_sid = cursor.lastrowid
-                            schools_map[(n_adm, n_name)] = new_sid
-                            schools_by_name[n_name] = new_sid
+                            schools_list.append({
+                                "school_id": new_sid,
+                                "admin_norm": n_adm,
+                                "school_norm": n_name,
+                                "mgr_phone": re.sub(r"[^\d]", "", str(s_rec.get("manager_phone", "") or "")),
+                                "sec_phone": re.sub(r"[^\d]", "", str(s_rec.get("security_officer_phone", "") or ""))
+                            })
                             result.schools_inserted += 1
                         else:
                             result.schools_skipped += 1
 
                 # 2. Process Guards and Link Assignments
-                self.progress.emit(75, "جاري إدخال وتحديث حراس الأمن وربطهم بالمدارس...")
+                self.progress.emit(75, "جاري إدخال وتحديث حراس الأمن وربطهم بالمدارس آلياً...")
 
                 # Cache existing guards
                 existing_guards_rows = cursor.execute("""
@@ -140,7 +157,7 @@ class SchoolSecurityImportWorker(QThread):
                 for g in existing_guards_rows:
                     gid = g["guard_id"]
                     nid = str(g["national_id"] or "").strip()
-                    phone = str(g["phone"] or "").strip()
+                    phone = re.sub(r"[^\d]", "", str(g["phone"] or ""))
                     n_name = normalize_arabic(g["guard_name"])
 
                     if nid and nid != "0" and len(nid) >= 6:
@@ -149,6 +166,44 @@ class SchoolSecurityImportWorker(QThread):
                         guards_by_name_phone[(n_name, phone)] = gid
                     if n_name:
                         guards_by_name[n_name] = gid
+
+                def find_school_for_guard(g_adm: str, g_sch: str, g_phone: str) -> Optional[int]:
+                    g_adm_norm = normalize_arabic(g_adm)
+                    g_sch_norm = normalize_arabic(g_sch)
+                    g_phone_clean = re.sub(r"[^\d]", "", str(g_phone or ""))
+
+                    # Pass 1: Exact admin and school
+                    for s in schools_list:
+                        if s["admin_norm"] == g_adm_norm and s["school_norm"] == g_sch_norm:
+                            return s["school_id"]
+
+                    # Pass 2: Token overlap in same admin
+                    g_tokens = set(g_sch_norm.split())
+                    if g_tokens:
+                        for s in schools_list:
+                            if s["admin_norm"] == g_adm_norm:
+                                s_tokens = set(s["school_norm"].split())
+                                if (g_tokens & s_tokens) or (g_sch_norm and g_sch_norm in s["school_norm"]) or (s["school_norm"] and s["school_norm"] in g_sch_norm):
+                                    return s["school_id"]
+
+                    # Pass 3: Phone match with security officer or manager
+                    if g_phone_clean and len(g_phone_clean) >= 7:
+                        for s in schools_list:
+                            if (s["sec_phone"] and g_phone_clean in s["sec_phone"]) or (s["mgr_phone"] and g_phone_clean in s["mgr_phone"]):
+                                return s["school_id"]
+
+                    # Pass 4: Single school in administration fallback
+                    same_admin = [s for s in schools_list if s["admin_norm"] == g_adm_norm]
+                    if len(same_admin) == 1:
+                        return same_admin[0]["school_id"]
+
+                    # Pass 5: Cross-admin name match
+                    if g_sch_norm and len(g_sch_norm) >= 3:
+                        for s in schools_list:
+                            if s["school_norm"] == g_sch_norm or (len(g_sch_norm) >= 4 and g_sch_norm in s["school_norm"]):
+                                return s["school_id"]
+
+                    return None
 
                 for g_rec in guard_records:
                     if self._is_cancelled:
@@ -159,13 +214,14 @@ class SchoolSecurityImportWorker(QThread):
                     n_name = normalize_arabic(g_name)
                     nid = str(g_rec.get("national_id", "") or "0").strip()
                     phone = str(g_rec.get("phone", "") or "").strip()
+                    phone_clean = re.sub(r"[^\d]", "", phone)
                     address = str(g_rec.get("address", "") or "").strip()
 
                     matched_gid = None
                     if nid and nid != "0" and len(nid) >= 6 and nid in guards_by_nid:
                         matched_gid = guards_by_nid[nid]
-                    elif n_name and phone and (n_name, phone) in guards_by_name_phone:
-                        matched_gid = guards_by_name_phone[(n_name, phone)]
+                    elif n_name and phone_clean and (n_name, phone_clean) in guards_by_name_phone:
+                        matched_gid = guards_by_name_phone[(n_name, phone_clean)]
                     elif n_name and n_name in guards_by_name:
                         matched_gid = guards_by_name[n_name]
 
@@ -197,8 +253,8 @@ class SchoolSecurityImportWorker(QThread):
                             target_gid = cursor.lastrowid
                             if nid and nid != "0":
                                 guards_by_nid[nid] = target_gid
-                            if n_name and phone:
-                                guards_by_name_phone[(n_name, phone)] = target_gid
+                            if n_name and phone_clean:
+                                guards_by_name_phone[(n_name, phone_clean)] = target_gid
                             if n_name:
                                 guards_by_name[n_name] = target_gid
                             result.guards_inserted += 1
@@ -208,10 +264,11 @@ class SchoolSecurityImportWorker(QThread):
 
                     # Link Guard to School Assignment
                     if target_gid:
-                        sch_name = normalize_arabic(g_rec.get("school_name", ""))
-                        adm_name = normalize_arabic(g_rec.get("administration", ""))
-
-                        linked_sid = schools_map.get((adm_name, sch_name)) or schools_by_name.get(sch_name)
+                        linked_sid = find_school_for_guard(
+                            g_rec.get("administration", ""),
+                            g_rec.get("school_name", ""),
+                            phone
+                        )
 
                         if linked_sid:
                             cursor.execute(
@@ -238,11 +295,10 @@ class SchoolSecurityImportWorker(QThread):
 
                 conn.commit()
 
-            self.progress.emit(100, "اكتمل الاستيراد وتحديث البيانات بنجاح!")
+            self.progress.emit(100, "اكتمل الاستيراد وتحديث البيانات وربط الحراس بالمدارس بنجاح!")
             self.finished_signal.emit(result)
 
         except Exception as e:
             result.success = False
             result.errors.append(str(e))
             self.failed_signal.emit(str(e))
-

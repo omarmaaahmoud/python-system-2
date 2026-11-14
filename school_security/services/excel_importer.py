@@ -3,8 +3,8 @@
 Smart Excel Importer for School Security Management System.
 Features:
 - Dynamic worksheet discovery
-- Flexible Arabic column name mapping
-- Cleans and normalizes Arabic text
+- Intelligent rule-based Arabic column name mapping
+- Cleans and normalizes Arabic text and administrations
 - Preserves leading zeros in National IDs and phone numbers (as TEXT)
 - Detects conflicts and maps guards to schools
 """
@@ -15,41 +15,6 @@ import openpyxl
 
 from ..database import normalize_arabic
 from ..models import ImportResult
-
-
-# Flexible Arabic Synonyms for School Sheet Columns
-SCHOOL_COLUMN_SYNONYMS = {
-    "administration": ["الإدارة", "الادارة", "الادارة التعليمية", "الإدارة التعليمية", "اسم الادارة", "اسم الإدارة"],
-    "school_name": ["اسم المدرسة", "المدرسة", "اسم المدرسه", "المدرسه"],
-    "affiliation": ["التبعية", "نوع التبعية", "نوع المدرسة", "التبعيه"],
-    "manager_name": ["اسم مدير المدرسة", "مدير المدرسة", "اسم المدير", "المدير", "مدير المدرسه"],
-    "manager_phone": ["التليفون", "تليفون المدير", "رقم المدير", "هاتف المدير", "موبايل المدير"],
-    "security_officer_name": ["اسم مسئول الأمن", "اسم مسؤول الأمن", "مسئول الأمن", "مسؤول الأمن", "مسئول الامن", "مسؤول الامن"],
-    "security_officer_phone": ["التليفون مسئول الامن", "تليفون مسئول الامن", "هاتف مسئول الامن", "تليفون مسؤول الأمن", "هاتف مسؤول الأمن"],
-    "classrooms_count": ["عدد الفصول", "الفصول"],
-    "gates_count": ["عدد البوابات", "البوابات"],
-    "fire_extinguishers_count": ["عدد الطفايات", "الطفايات"],
-    "fire_extinguisher_type": ["نوع الطفاية", "نوع الطفايه"],
-    "fire_extinguisher_weight": ["وزن الطفاية", "وزن الطفايه", "الوزن"],
-    "activated_fire_lines": ["عددخط الحريق المفعل", "عدد خط الحريق المفعل", "خطوط مفعلة", "خطوط مفعله"],
-    "inactive_fire_lines": ["عدد خط الحريق غير مفعل", "عدد خط الحريق غير المفعل", "خطوط غير مفعلة", "خطوط غير مفعله"],
-    "working_cameras": ["عدد الكاميرات التى تعمل", "عدد الكاميرات التي تعمل", "كاميرات تعمل"],
-    "non_working_cameras": ["عدد الكاميرات التى لا تعمل", "عدد الكاميرات التي لا تعمل", "كاميرات معطلة", "كاميرات لا تعمل"],
-    "camera_maintenance_company": ["اسم شركة صيانة الكاميرات", "شركة الصيانة", "شركه الصيانه", "صيانة الكاميرات"],
-    "buckets_count": ["عدد الجرادل", "الجرادل"],
-    "valid_fire_hoses": ["عدد خراطيم الحريق الصالحة", "خراطيم صالحة", "خراطيم صالحه"],
-    "invalid_fire_hoses": ["عدد خراطيم الحريق الغير صالحة", "خراطيم غير صالحة", "خراطيم غير صالحه", "خراطيم تالفة"],
-}
-
-# Flexible Arabic Synonyms for Guard Sheet Columns
-GUARD_COLUMN_SYNONYMS = {
-    "administration": ["الإدارة", "الادارة", "الادارة التعليمية", "الإدارة التعليمية"],
-    "school_name": ["المدرسة", "اسم المدرسة", "المدرسه", "اسم المدرسه"],
-    "address": ["العنوان", "عنوان المدرسة", "عنوان المدرسه"],
-    "guard_name": ["اسم الحارس", "اسم عمال الحراسة", "اسم العامل", "الحارس", "اسم حارس الأمن"],
-    "phone": ["رقم الهاتف", "الهاتف", "التليفون", "رقم التليفون", "موبايل"],
-    "national_id": ["الرقم القومي", "الرقم القومى", "بطاقة الرقم القومي"],
-}
 
 
 def clean_cell_text(val: Any) -> str:
@@ -66,14 +31,137 @@ def clean_cell_text(val: Any) -> str:
 
 
 def normalize_numeric_string(val: Any) -> str:
-    """Formats phone numbers or national IDs as pure digit string."""
+    """Formats phone numbers or national IDs as pure digit string with leading zero intact."""
     s = clean_cell_text(val)
     if not s:
         return ""
-    # Remove decimal points if float
     if "." in s:
         s = s.split(".")[0]
-    return s.strip()
+    digits = re.sub(r"[^\d]", "", s).strip()
+    if digits.startswith("1") and len(digits) == 10:
+        digits = "0" + digits
+    return digits
+
+
+def normalize_admin_name(raw: str) -> str:
+    """Standardizes administration names to official directorate names."""
+    if not raw:
+        return ""
+    n = normalize_arabic(raw).strip()
+    if "متزه" in n or "منتزه" in n:
+        if any(w in n for w in ("ثان", "تان", "2", "تاني")):
+            return "إدارة المنتزه ثان"
+        if any(w in n for w in ("اول", "1")):
+            return "إدارة المنتزه أول"
+        return "إدارة المنتزه"
+    if "شرق" in n:
+        return "إدارة شرق التعليمية"
+    if "وسط" in n:
+        return "إدارة وسط التعليمية"
+    if "غرب" in n:
+        return "إدارة غرب التعليمية"
+    if "جمرك" in n:
+        return "إدارة الجمرك التعليمية"
+    if "عجمي" in n or "عجمى" in n:
+        return "إدارة العجمي التعليمية"
+    if "عامري" in n:
+        return "إدارة العامرية التعليمية"
+    if "برج" in n:
+        return "إدارة برج العرب التعليمية"
+    if "ديوان" in n or "مديري" in n:
+        return "ديوان عام المديرية"
+    return str(raw).strip()
+
+
+def match_school_column(header_text: str) -> str:
+    """Accurately maps header text for the schools sheet."""
+    if not header_text:
+        return ""
+    h = normalize_arabic(header_text).strip()
+    if h in ("م", "م.", "مسلسل", "الرقم", "رقم"):
+        return "serial"
+
+    # Specific compound terms first
+    if "مدير" in h and any(p in h for p in ("تليفون", "هاتف", "موبايل", "رقم")):
+        return "manager_phone"
+    if "مدير" in h:
+        return "manager_name"
+    if ("مسئول" in h or "مسؤول" in h) and any(p in h for p in ("تليفون", "هاتف", "موبايل", "رقم")):
+        return "security_officer_phone"
+    if "مسئول" in h or "مسؤول" in h:
+        return "security_officer_name"
+
+    # Cameras
+    if any(w in h for w in ("كاميرات تعمل", "الكاميرات التي تعمل", "الكاميرات التى تعمل")) and "لا" not in h:
+        return "working_cameras"
+    if any(w in h for w in ("لا تعمل", "معطلة", "معطله", "غير تعمل")):
+        return "non_working_cameras"
+    if any(w in h for w in ("صيانه", "شركه", "شركة")):
+        return "camera_maintenance_company"
+
+    # Fire Lines
+    if "مفعل" in h and "غير" not in h and "لا" not in h:
+        return "activated_fire_lines"
+    if "غير مفعل" in h or "غير مفعله" in h or "معطل" in h:
+        return "inactive_fire_lines"
+
+    # Fire Hoses
+    if "خراطيم" in h and ("غير" in h or "تالف" in h or "معطل" in h):
+        return "invalid_fire_hoses"
+    if "خراطيم" in h:
+        return "valid_fire_hoses"
+
+    # Buckets
+    if "جرادل" in h or "جردل" in h:
+        return "buckets_count"
+
+    # Extinguishers
+    if "طفايه" in h or "طفايات" in h:
+        if "نوع" in h:
+            return "fire_extinguisher_type"
+        if "وزن" in h:
+            return "fire_extinguisher_weight"
+        return "fire_extinguishers_count"
+
+    # Basic School Info
+    if "فصول" in h:
+        return "classrooms_count"
+    if "بوابات" in h:
+        return "gates_count"
+    if "تبعيه" in h or "نوع المدرسه" in h:
+        return "affiliation"
+    if "تليفون" in h or "هاتف" in h:
+        return "manager_phone"
+    if "مدرسه" in h and "مدير" not in h and "مسئول" not in h:
+        return "school_name"
+    if "اداره" in h or "إدارة" in h or "متزه" in h or "منتزه" in h:
+        return "administration"
+
+    return ""
+
+
+def match_guard_column(header_text: str) -> str:
+    """Accurately maps header text for the guards sheet."""
+    if not header_text:
+        return ""
+    h = normalize_arabic(header_text).strip()
+    if h in ("م", "م.", "مسلسل", "الرقم", "رقم"):
+        return "serial"
+
+    if any(w in h for w in ("قومي", "قومى", "بطاقه")):
+        return "national_id"
+    if any(w in h for w in ("هاتف", "تليفون", "موبايل", "جوال")):
+        return "phone"
+    if any(w in h for w in ("حارس", "عمال", "فرد", "عامل")):
+        return "guard_name"
+    if any(w in h for w in ("عنوان", "مقر", "مكان")):
+        return "address"
+    if "مدرسه" in h:
+        return "school_name"
+    if "اداره" in h or "إدارة" in h or "متزه" in h or "منتزه" in h:
+        return "administration"
+
+    return ""
 
 
 class SchoolSecurityExcelImporter:
@@ -95,18 +183,19 @@ class SchoolSecurityExcelImporter:
             elif "حراس" in normalized or "حراسه" in normalized or "عمال" in normalized:
                 self.guards_sheet_name = sheet_name
 
-        # Fallback if names didn't match keywords
         if not self.schools_sheet_name and len(self.workbook.sheetnames) > 0:
             self.schools_sheet_name = self.workbook.sheetnames[0]
         if not self.guards_sheet_name and len(self.workbook.sheetnames) > 1:
             self.guards_sheet_name = self.workbook.sheetnames[1]
 
-    def _find_header_row(self, ws, synonyms: Dict[str, List[str]]) -> Tuple[int, Dict[int, str]]:
+    def _find_header_row(self, ws, sheet_type: str = "school") -> Tuple[int, Dict[int, str]]:
         """Finds the row index that contains the column headers and builds index-to-key map."""
         max_scan = min(15, ws.max_row)
         best_row_idx = 1
         best_mapping: Dict[int, str] = {}
         max_matches = 0
+
+        matcher = match_school_column if sheet_type == "school" else match_guard_column
 
         for r_idx, row in enumerate(ws.iter_rows(max_row=max_scan, values_only=True), start=1):
             current_mapping = {}
@@ -115,16 +204,10 @@ class SchoolSecurityExcelImporter:
                 cell_text = clean_cell_text(cell)
                 if not cell_text:
                     continue
-                cell_norm = normalize_arabic(cell_text)
-
-                for target_key, syn_list in synonyms.items():
-                    for syn in syn_list:
-                        if normalize_arabic(syn) in cell_norm or cell_norm in normalize_arabic(syn):
-                            current_mapping[col_idx] = target_key
-                            matches_count += 1
-                            break
-                    if col_idx in current_mapping:
-                        break
+                matched_key = matcher(cell_text)
+                if matched_key and matched_key != "serial":
+                    current_mapping[col_idx] = matched_key
+                    matches_count += 1
 
             if matches_count > max_matches:
                 max_matches = matches_count
@@ -139,14 +222,13 @@ class SchoolSecurityExcelImporter:
             return []
 
         ws = self.workbook[self.schools_sheet_name]
-        header_row, col_map = self._find_header_row(ws, SCHOOL_COLUMN_SYNONYMS)
+        header_row, col_map = self._find_header_row(ws, sheet_type="school")
 
         records = []
         rows = list(ws.iter_rows(min_row=header_row + 1, values_only=True))
 
         for row_idx, row in enumerate(rows, start=header_row + 1):
-            # Check if row is empty or serial-only
-            non_empty_cells = [c for i, c in enumerate(row) if clean_cell_text(c)]
+            non_empty_cells = [c for c in row if clean_cell_text(c)]
             if not non_empty_cells:
                 continue
 
@@ -183,6 +265,10 @@ class SchoolSecurityExcelImporter:
                         val = normalize_numeric_string(cell)
                     record[key] = val
 
+            # Normalize administration name
+            if record["administration"]:
+                record["administration"] = normalize_admin_name(record["administration"])
+
             # Ignore rows that have no school name and no administration
             if not record["school_name"] and not record["administration"]:
                 continue
@@ -197,7 +283,7 @@ class SchoolSecurityExcelImporter:
             return []
 
         ws = self.workbook[self.guards_sheet_name]
-        header_row, col_map = self._find_header_row(ws, GUARD_COLUMN_SYNONYMS)
+        header_row, col_map = self._find_header_row(ws, sheet_type="guard")
 
         records = []
         rows = list(ws.iter_rows(min_row=header_row + 1, values_only=True))
@@ -226,11 +312,13 @@ class SchoolSecurityExcelImporter:
                         val = normalize_numeric_string(cell)
                     record[key] = val
 
-            # Ignore rows with no guard name and no school name
+            # Normalize administration name
+            if record["administration"]:
+                record["administration"] = normalize_admin_name(record["administration"])
+
             if not record["guard_name"] and not record["school_name"]:
                 continue
 
             records.append(record)
 
         return records
-

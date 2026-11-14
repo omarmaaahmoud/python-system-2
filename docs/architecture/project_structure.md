@@ -92,3 +92,4 @@ exclusions_prisoners_system/
 | **نقطة الدخول بالواجهة** | الفهرس 0 في `master_system_stack` بالنافذة الرئيسية | الفهرس 1 في `master_system_stack` بالنافذة الرئيسية |
 | **محرك استيراد الإكسيل** | `ExcelImporter` في `excel_importer.py` | `SchoolSecurityExcelImporter` و `ImportWorker` |
 | **سياسة الحفظ في التحديث** | مستثناة من الاستبدال عند النشر للقرص `E:` | مستثناة من الاستبدال عند النشر للقرص `E:` |
+

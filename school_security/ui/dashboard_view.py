@@ -41,12 +41,15 @@ class SchoolSecurityDashboardView(QWidget):
     def init_ui(self):
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background-color: #F1F5F9; border: none; }")
 
         container = QWidget()
+        container.setStyleSheet("background-color: #F1F5F9;")
         self.layout = QVBoxLayout(container)
         self.layout.setContentsMargins(24, 20, 24, 24)
         self.layout.setSpacing(18)
@@ -54,7 +57,7 @@ class SchoolSecurityDashboardView(QWidget):
         # 1. Header with Refresh Button
         header_h = QHBoxLayout()
         title_lbl = QLabel("📊 لوحة مؤشرات متابعة تأمين المدارس")
-        title_lbl.setStyleSheet("font-size: 18px; font-weight: 800; color: #1E3A8A;")
+        title_lbl.setStyleSheet("font-size: 18px; font-weight: 800; color: #1E3A8A; background: transparent;")
         header_h.addWidget(title_lbl)
         header_h.addStretch()
 
@@ -92,7 +95,7 @@ class SchoolSecurityDashboardView(QWidget):
 
         # 3. Quick Action Cards
         sec_actions = QLabel("⚡ الإجراءات السريعة والتنقل الفوري")
-        sec_actions.setStyleSheet("font-size: 15px; font-weight: bold; color: #1E3A8A; margin-top: 6px;")
+        sec_actions.setStyleSheet("font-size: 15px; font-weight: bold; color: #1E3A8A; margin-top: 6px; background: transparent;")
         self.layout.addWidget(sec_actions)
 
         act_grid = QGridLayout()
@@ -114,7 +117,7 @@ class SchoolSecurityDashboardView(QWidget):
 
         # 4. Distribution Breakdown Table
         sec_dist = QLabel("📈 التوزيع الإحصائي على الإدارات التعليمية")
-        sec_dist.setStyleSheet("font-size: 15px; font-weight: bold; color: #1E3A8A; margin-top: 8px;")
+        sec_dist.setStyleSheet("font-size: 15px; font-weight: bold; color: #1E3A8A; margin-top: 8px; background: transparent;")
         self.layout.addWidget(sec_dist)
 
         dist_card = QFrame()
@@ -137,32 +140,36 @@ class SchoolSecurityDashboardView(QWidget):
 
     def _create_kpi_card(self, title: str, val: str, subtext: str, color: str) -> QFrame:
         card = QFrame()
+        card.setObjectName("KpiCard")
         card.setStyleSheet(f"""
-            QFrame {{
+            QFrame#KpiCard {{
                 background-color: white;
                 border: 1px solid #E2E8F0;
                 border-top: 4px solid {color};
                 border-radius: 12px;
-                padding: 12px;
             }}
-            QFrame:hover {{
+            QFrame#KpiCard:hover {{
                 border-color: #3B82F6;
+                border-top: 4px solid {color};
             }}
         """)
         v = QVBoxLayout(card)
-        v.setContentsMargins(10, 8, 10, 8)
+        v.setContentsMargins(14, 14, 14, 14)
         v.setSpacing(4)
 
         t = QLabel(title)
-        t.setStyleSheet("font-size: 12px; font-weight: 600; color: #64748B; border: none;")
+        t.setStyleSheet("font-size: 12px; font-weight: 600; color: #64748B; border: none; background: transparent;")
+        t.setAlignment(Qt.AlignRight)
         v.addWidget(t)
 
         lbl_val = QLabel(val)
-        lbl_val.setStyleSheet(f"font-size: 24px; font-weight: 800; color: {color}; border: none;")
+        lbl_val.setStyleSheet(f"font-size: 26px; font-weight: 800; color: {color}; border: none; background: transparent;")
+        lbl_val.setAlignment(Qt.AlignRight)
         v.addWidget(lbl_val)
 
         s = QLabel(subtext)
-        s.setStyleSheet("font-size: 11px; color: #94A3B8; border: none;")
+        s.setStyleSheet("font-size: 11px; color: #94A3B8; border: none; background: transparent;")
+        s.setAlignment(Qt.AlignRight)
         v.addWidget(s)
 
         card.val_label = lbl_val
@@ -170,31 +177,36 @@ class SchoolSecurityDashboardView(QWidget):
 
     def _create_action_card(self, title: str, subtitle: str, color: str, callback: Callable) -> QWidget:
         card = ClickableCard(callback)
+        card.setObjectName("ActionCardBtn")
         card.setStyleSheet(f"""
-            QFrame {{
+            QFrame#ActionCardBtn {{
                 background-color: white;
                 border: 1px solid #E2E8F0;
                 border-radius: 12px;
-                border-right: 4px solid {color};
-                padding: 12px;
+                border-right: 5px solid {color};
             }}
-            QFrame:hover {{
+            QFrame#ActionCardBtn:hover {{
                 background-color: #F8FAFC;
                 border: 1.5px solid {color};
-                border-right: 4px solid {color};
+                border-right: 5px solid {color};
             }}
         """)
-        card.setMinimumHeight(80)
+        card.setMinimumHeight(85)
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         v = QVBoxLayout(card)
+        v.setContentsMargins(14, 12, 14, 12)
         v.setSpacing(4)
 
         t = QLabel(title)
-        t.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {color}; border: none;")
+        t.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {color}; border: none; background: transparent;")
+        t.setAlignment(Qt.AlignRight)
         t.setAttribute(Qt.WA_TransparentForMouseEvents)
         v.addWidget(t)
 
         sub = QLabel(subtitle)
-        sub.setStyleSheet("font-size: 11px; color: #64748B; border: none;")
+        sub.setWordWrap(True)
+        sub.setStyleSheet("font-size: 11px; color: #475569; border: none; background: transparent;")
+        sub.setAlignment(Qt.AlignRight)
         sub.setAttribute(Qt.WA_TransparentForMouseEvents)
         v.addWidget(sub)
 
@@ -212,12 +224,22 @@ class SchoolSecurityDashboardView(QWidget):
         self.kpi_classrooms.val_label.setText(f"{metrics['total_classrooms']:,}")
         self.kpi_incomplete.val_label.setText(f"{metrics['incomplete_schools_count']:,}")
 
-        # Populate breakdown table
+        # Update distribution table
         breakdown = metrics.get("admin_breakdown", [])
         self.admin_table.setRowCount(len(breakdown))
         for r_idx, b in enumerate(breakdown):
-            self.admin_table.setItem(r_idx, 0, QTableWidgetItem(str(r_idx + 1)))
-            self.admin_table.setItem(r_idx, 1, QTableWidgetItem(b.get("administration", "—")))
-            self.admin_table.setItem(r_idx, 2, QTableWidgetItem(f"{b.get('schools_cnt', 0):,} مدرسة"))
-            self.admin_table.setItem(r_idx, 3, QTableWidgetItem(f"{b.get('guards_cnt', 0):,} حارس"))
+            idx_item = QTableWidgetItem(str(r_idx + 1))
+            idx_item.setTextAlignment(Qt.AlignCenter)
+            self.admin_table.setItem(r_idx, 0, idx_item)
 
+            adm_item = QTableWidgetItem(str(b.get("administration", "")))
+            adm_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.admin_table.setItem(r_idx, 1, adm_item)
+
+            sch_item = QTableWidgetItem(f"{b.get('schools_cnt', 0):,}")
+            sch_item.setTextAlignment(Qt.AlignCenter)
+            self.admin_table.setItem(r_idx, 2, sch_item)
+
+            grd_item = QTableWidgetItem(f"{b.get('guards_cnt', 0):,}")
+            grd_item.setTextAlignment(Qt.AlignCenter)
+            self.admin_table.setItem(r_idx, 3, grd_item)

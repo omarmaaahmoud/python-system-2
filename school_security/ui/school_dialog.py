@@ -213,8 +213,9 @@ class SchoolDialog(QDialog):
         main_layout.addLayout(btn_bar)
 
         if self.read_only:
-            for widget in container.findChildren((QLineEdit, QTextEdit, QComboBox)):
-                widget.setEnabled(False)
+            for w_type in (QLineEdit, QTextEdit, QComboBox):
+                for widget in container.findChildren(w_type):
+                    widget.setEnabled(False)
 
     def load_school_data(self):
         school = self.school_service.get_school_by_id(self.school_id)
