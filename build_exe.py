@@ -158,12 +158,13 @@ if desktop:
     except Exception as e:
         print(">>> Could not copy ZIP to Desktop:", e)
 
-    # Refresh Desktop shortcut
+    # Refresh Desktop shortcut (optional, with safe timeout)
     try:
         target_exe = out_folder / "ExclusionsAndPrisonersSystem.exe"
         temp_lnk = desktop / "app_sc_tmp.lnk"
         final_lnk = desktop / "نظام بيانات المستبعدين والمسجونين.lnk"
         ps_code = f"""
+$ErrorActionPreference = 'SilentlyContinue'
 $wsh = New-Object -ComObject WScript.Shell
 $sc = $wsh.CreateShortcut('{temp_lnk}')
 $sc.TargetPath = '{target_exe}'
@@ -171,14 +172,18 @@ $sc.WorkingDirectory = '{out_folder}'
 $sc.IconLocation = '{ICON_PATH},0'
 $sc.Save()
 """
-        subprocess.run(["powershell", "-Command", ps_code], check=False)
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_code],
+            check=False,
+            timeout=3
+        )
         if temp_lnk.exists():
             if final_lnk.exists():
                 final_lnk.unlink()
             temp_lnk.rename(final_lnk)
             print(">>> Desktop shortcut refreshed successfully.")
     except Exception as e:
-        print(">>> Desktop shortcut error:", e)
+        print(">>> Desktop shortcut skipped or error:", e)
 
 # Deploy build to E:\ExclusionsAndPrisonersSystem (if E drive is connected)
 target_drive_e = Path("E:/ExclusionsAndPrisonersSystem")

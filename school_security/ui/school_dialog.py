@@ -157,9 +157,10 @@ class SchoolDialog(QDialog):
         self.txt_school_name.setPlaceholderText("أدخل الاسم الرسمي للمدرسة")
         g1.addWidget(self.txt_school_name, 0, 3)
 
-        lbl_affil = QLabel("التبعية:")
+        lbl_affil = QLabel("التبعية / المرحلة:")
         g1.addWidget(lbl_affil, 1, 0)
         self.combo_affil = QComboBox()
+        self.combo_affil.setEditable(True)
         self.combo_affil.addItems(DEFAULT_AFFILIATIONS)
         g1.addWidget(self.combo_affil, 1, 1)
 
