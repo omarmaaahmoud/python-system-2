@@ -41,7 +41,7 @@ if getattr(sys, 'frozen', False) and not DB_FILE.exists():
 # Application Metadata
 APP_NAME = "نظام بيانات المستبعدين والمسجونين"
 APP_SUBTITLE = "مديرية التربية والتعليم بالإسكندرية"
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.2.1"
 APP_AUTHOR = "إدارة نظم المعلومات والتحول الرقمي"
 
 # UI Theme & Colors (Modern Executive Dark/Light Blue Palette)

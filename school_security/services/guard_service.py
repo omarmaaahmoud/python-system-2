@@ -32,16 +32,17 @@ class GuardService:
                 params.append(school_id)
 
             if search_query and search_query.strip():
-                pattern = f"%{search_query.strip()}%"
+                clean_q = search_query.strip()
+                pattern = f"%{clean_q}%"
                 where_clauses.append("""(
-                    NORMALIZE_AR(g.guard_name) LIKE NORMALIZE_AR(?) OR
+                    MATCH_NAME_SEQUENTIAL(g.guard_name, ?) OR
                     g.national_id LIKE ? OR
                     g.phone LIKE ? OR
                     NORMALIZE_AR(s.school_name) LIKE NORMALIZE_AR(?) OR
                     NORMALIZE_AR(s.administration) LIKE NORMALIZE_AR(?) OR
                     a.address LIKE ?
                 )""")
-                params.extend([pattern] * 6)
+                params.extend([clean_q, pattern, pattern, pattern, pattern, pattern])
 
             where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
             limit_sql = f"LIMIT {limit} OFFSET {offset}" if limit else ""

@@ -6,6 +6,7 @@ Exports styled Arabic Excel workbooks with professional headers and formatting.
 from typing import List, Dict, Any
 from pathlib import Path
 import openpyxl
+import openpyxl.worksheet.properties
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
@@ -58,14 +59,32 @@ class SchoolSecurityExcelExporter:
                 else:
                     cell.alignment = right_align
 
-        # Auto-adjust column widths
+        # Auto-adjust column widths (skip merged title row, cap max width)
         for col in ws.columns:
             max_len = 0
             col_letter = get_column_letter(col[0].column)
             for cell in col:
+                # Skip the merged title row (row 1)
+                if cell.row == 1:
+                    continue
                 val_str = str(cell.value or "")
-                max_len = max(max_len, len(val_str))
-            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+                # Arabic characters are wider, estimate better width
+                char_len = 0
+                for ch in val_str:
+                    if '\u0600' <= ch <= '\u06FF' or '\uFE70' <= ch <= '\uFEFF':
+                        char_len += 1.6  # Arabic chars are wider
+                    else:
+                        char_len += 1
+                max_len = max(max_len, char_len)
+            # Cap column width: minimum 8, maximum 35
+            adjusted = max(max_len + 2, 8)
+            ws.column_dimensions[col_letter].width = min(adjusted, 35)
+
+        # Set print area for clean printing
+        ws.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetupProperties(fitToPage=True)
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.page_setup.orientation = 'landscape'
 
     @classmethod
     def export_schools(cls, file_path: str, schools: List[Dict[str, Any]]):

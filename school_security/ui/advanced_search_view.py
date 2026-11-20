@@ -165,8 +165,9 @@ class AdvancedSearchView(QWidget):
             params.append(f"%{sch_name}%")
 
         if guard_kw:
-            where_clauses.append("(NORMALIZE_AR(g.guard_name) LIKE NORMALIZE_AR(?) OR g.national_id LIKE ?)")
-            params.extend([f"%{guard_kw}%", f"%{guard_kw}%"])
+            clean_guard_kw = guard_kw.strip()
+            where_clauses.append("(MATCH_NAME_SEQUENTIAL(g.guard_name, ?) OR g.national_id LIKE ?)")
+            params.extend([clean_guard_kw, f"%{clean_guard_kw}%"])
 
         if phone_kw:
             where_clauses.append("(s.manager_phone LIKE ? OR s.security_officer_phone LIKE ? OR g.phone LIKE ?)")

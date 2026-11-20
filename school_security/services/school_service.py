@@ -33,16 +33,17 @@ class SchoolService:
                 params.append(affiliation.strip())
 
             if search_query and search_query.strip():
-                pattern = f"%{search_query.strip()}%"
+                clean_q = search_query.strip()
+                pattern = f"%{clean_q}%"
                 where_clauses.append("""(
                     NORMALIZE_AR(s.school_name) LIKE NORMALIZE_AR(?) OR
-                    NORMALIZE_AR(s.manager_name) LIKE NORMALIZE_AR(?) OR
+                    MATCH_NAME_SEQUENTIAL(s.manager_name, ?) OR
                     s.manager_phone LIKE ? OR
-                    NORMALIZE_AR(s.security_officer_name) LIKE NORMALIZE_AR(?) OR
+                    MATCH_NAME_SEQUENTIAL(s.security_officer_name, ?) OR
                     s.security_officer_phone LIKE ? OR
                     s.camera_maintenance_company LIKE ?
                 )""")
-                params.extend([pattern] * 6)
+                params.extend([pattern, clean_q, pattern, clean_q, pattern, pattern])
 
             where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
             limit_sql = f"LIMIT {limit} OFFSET {offset}" if limit else ""

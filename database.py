@@ -1,5 +1,6 @@
 import re
 import json
+import time
 import sqlite3
 import logging
 from decimal import Decimal, InvalidOperation
@@ -29,6 +30,81 @@ def normalize_arabic(text: Any) -> str:
     # Collapse multiple spaces
     s = re.sub(r"\s+", " ", s)
     return s
+
+
+def tokenize_name(text: Any) -> List[str]:
+    """Tokenizes Arabic or English name into clean tokens, collapsing compound prefixes (عبد, ابو, ام)."""
+    if not text:
+        return []
+    norm = normalize_arabic(text)
+    raw_tokens = norm.split()
+    tokens: List[str] = []
+    i = 0
+    while i < len(raw_tokens):
+        w = raw_tokens[i]
+        if w in ("عبد", "ابو", "ام") and i + 1 < len(raw_tokens):
+            tokens.append(w + raw_tokens[i + 1])
+            i += 2
+        else:
+            tokens.append(w)
+            i += 1
+    return tokens
+
+
+def match_name_sequential(stored_name: Any, query: Any) -> bool:
+    """Matches stored_name against query word by word in exact sequential order starting from word 1.
+    
+    Ensures:
+    1. Search tokens must match beginning name tokens sequentially (token 0 matches token 0, etc.).
+    2. Words appearing in the middle or end are NOT matched.
+    3. The final token supports prefix matching (e.g. typing partial word), unless query has trailing space.
+    4. Handles Arabic normalization and 'ال' prefix variants.
+    """
+    if not query:
+        return True
+    q_str = str(query).strip()
+    if not q_str:
+        return True
+    if not stored_name:
+        return False
+    n_str = str(stored_name).strip()
+    if not n_str:
+        return False
+
+    q_tokens = tokenize_name(q_str)
+    n_tokens = tokenize_name(n_str)
+
+    if not q_tokens:
+        return True
+    if len(n_tokens) < len(q_tokens):
+        return False
+
+    has_trailing_space = str(query).endswith(" ")
+
+    for idx, q_tok in enumerate(q_tokens):
+        n_tok = n_tokens[idx]
+        is_last = (idx == len(q_tokens) - 1)
+
+        def tokens_match(n: str, q: str, prefix_ok: bool) -> bool:
+            if n == q:
+                return True
+            if prefix_ok and n.startswith(q):
+                return True
+            if n.startswith("ال") and len(n) > 3:
+                n_no_al = n[2:]
+                if n_no_al == q or (prefix_ok and n_no_al.startswith(q)):
+                    return True
+            if q.startswith("ال") and len(q) > 3:
+                q_no_al = q[2:]
+                if n == q_no_al or (prefix_ok and n.startswith(q_no_al)):
+                    return True
+            return False
+
+        allow_prefix = is_last and not has_trailing_space
+        if not tokens_match(n_tok, q_tok, allow_prefix):
+            return False
+
+    return True
 
 
 _IMPORT_DIGIT_MAP = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
@@ -87,10 +163,49 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path, timeout=20.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.create_function("NORMALIZE_AR", 1, normalize_arabic)
+        conn.create_function("MATCH_NAME_SEQUENTIAL", 2, match_name_sequential)
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
         return conn
+
+    def safe_checkpoint_and_close(self, max_retries: int = 3, retry_delay: float = 0.5) -> bool:
+        """Safely checkpoints all WAL frames to the main database file and verifies integrity.
+        Uses PRAGMA wal_checkpoint(TRUNCATE) to merge all journal frames into the database
+        and truncate the WAL file to 0 bytes.
+        
+        Returns:
+            bool: True if checkpoint succeeded and integrity check passed.
+        """
+        for attempt in range(max_retries):
+            try:
+                conn = sqlite3.connect(self.db_path, timeout=30.0)
+                try:
+                    cur = conn.cursor()
+                    cur.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                    row = cur.fetchone()
+                    if row:
+                        busy, log, checkpointed = row[0], row[1], row[2]
+                        if busy != 0:
+                            logger.warning("WAL checkpoint busy (attempt %d/%d). Retrying...", attempt + 1, max_retries)
+                            time.sleep(retry_delay)
+                            continue
+
+                    cur.execute("PRAGMA integrity_check;")
+                    check_result = cur.fetchone()[0]
+                    if check_result != "ok":
+                        logger.error("Database integrity check failed: %s", check_result)
+                        return False
+
+                    logger.info("WAL checkpoint (TRUNCATE) and integrity check succeeded on %s.", self.db_path)
+                    return True
+                finally:
+                    conn.close()
+            except Exception as e:
+                logger.error("Error during WAL checkpoint on %s: %s", self.db_path, e)
+                time.sleep(retry_delay)
+
+        return False
 
     def init_database(self) -> None:
         """Initializes database schema with constraints, foreign keys, and indexes."""
@@ -481,48 +596,95 @@ class DatabaseManager:
             return [dict(row) for row in cur.fetchall()]
 
     @staticmethod
-    def _build_search_clause(query: str, fields: List[str]) -> Tuple[str, List[Any]]:
-        """Builds multi-word Arabic normalized search clause with prefix variants (ال-)."""
-        clean_q = query.strip()
+    def _build_search_clause(query: str, fields: List[str], name_fields: Optional[List[str]] = None) -> Tuple[str, List[Any]]:
+        """Builds multi-word Arabic normalized search clause.
+        
+        Requirements:
+        1. Name fields (e.g. e.full_name) match ONLY from the beginning of the full name in exact sequence (First Name Matching).
+        2. Multi-word name queries match the beginning of the full name word by word in exact order.
+        3. Other fields (national_id, school, administration, case_type, etc.) retain multi-word matching evaluated per-field
+           to prevent cross-field false positive matches.
+        4. Handles extra whitespace, Arabic normalization, 'ال' prefix variants, and compound names (عبد/ابو).
+        """
+        clean_q = " ".join(query.strip().split())
         if not clean_q:
             return "", []
 
-        words = [w for w in clean_q.split() if w]
+        words = clean_q.split()
         if not words:
             return "", []
 
-        clauses = []
-        params = []
+        # Identify name fields vs non-name fields
+        if name_fields is not None:
+            n_fields = list(name_fields)
+            o_fields = [f for f in fields if f not in n_fields]
+        else:
+            n_fields = []
+            o_fields = []
+            for f in fields:
+                f_lower = f.lower()
+                if any(k in f_lower for k in ("full_name", "guard_name", "manager_name", "security_officer_name")):
+                    n_fields.append(f)
+                else:
+                    o_fields.append(f)
 
-        for raw_w in words:
-            norm_w = normalize_arabic(raw_w)
-            variants = [norm_w]
-            # Strip or add 'ال'
-            if norm_w.startswith("ال") and len(norm_w) > 3:
-                variants.append(norm_w[2:])
-            elif not norm_w.startswith("ال") and len(norm_w) > 1:
-                variants.append("ال" + norm_w)
+        name_clause = ""
+        name_params: List[Any] = []
+        if n_fields:
+            name_subclauses = []
+            for nf in n_fields:
+                raw_col = nf
+                if raw_col.startswith("NORMALIZE_AR(") and raw_col.endswith(")"):
+                    raw_col = raw_col[13:-1]
+                name_subclauses.append(f"MATCH_NAME_SEQUENTIAL({raw_col}, ?)")
+                name_params.append(clean_q)
 
-            word_subclauses = []
-            for var in variants:
-                v_param = f"%{var}%"
-                raw_param = f"%{raw_w}%"
-                for f in fields:
-                    if f.startswith("NORMALIZE_AR"):
-                        word_subclauses.append(f"{f} LIKE ?")
-                        params.append(v_param)
-                    else:
-                        word_subclauses.append(f"{f} LIKE ?")
-                        params.append(raw_param)
+            if name_subclauses:
+                name_clause = f"({' OR '.join(name_subclauses)})"
 
-            clauses.append(f"({' OR '.join(word_subclauses)})")
+        other_clause = ""
+        other_params: List[Any] = []
+        if o_fields:
+            field_clauses = []
+            for of in o_fields:
+                of_sub = []
+                for w in words:
+                    norm_w = normalize_arabic(w)
+                    w_vars = [norm_w]
+                    if norm_w.startswith("ال") and len(norm_w) > 3:
+                        w_vars.append(norm_w[2:])
+                    elif not norm_w.startswith("ال") and len(norm_w) > 1:
+                        w_vars.append("ال" + norm_w)
 
-        return f" AND ({' AND '.join(clauses)})", params
+                    var_clauses = []
+                    for v in w_vars:
+                        if of.startswith("NORMALIZE_AR"):
+                            var_clauses.append(f"{of} LIKE ?")
+                            other_params.append(f"%{v}%")
+                        else:
+                            var_clauses.append(f"{of} LIKE ?")
+                            other_params.append(f"%{w}%")
+                    if var_clauses:
+                        of_sub.append(f"({' OR '.join(var_clauses)})")
+                if of_sub:
+                    field_clauses.append(f"({' AND '.join(of_sub)})")
+
+            if field_clauses:
+                other_clause = f"({' OR '.join(field_clauses)})"
+
+        if name_clause and other_clause:
+            return f" AND ({name_clause} OR {other_clause})", name_params + other_params
+        elif name_clause:
+            return f" AND ({name_clause})", name_params
+        elif other_clause:
+            return f" AND ({other_clause})", other_params
+        return "", []
 
     # --- Excluded Records Operations ---
     def search_excluded(self, query: str = "", admin_id: Optional[int] = None, 
                         case_type_id: Optional[int] = None, case_type_query: str = "",
-                        limit: int = 500, offset: int = 0) -> List[Dict[str, Any]]:
+                        limit: int = 500, offset: int = 0,
+                        search_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         with self.get_connection() as conn:
             cur = conn.cursor()
             sql = """
@@ -552,7 +714,7 @@ class DatabaseManager:
             """
             params: List[Any] = []
             if query:
-                fields = [
+                fields = search_fields or [
                     "NORMALIZE_AR(e.full_name)",
                     "e.national_id",
                     "NORMALIZE_AR(e.school)",
@@ -585,7 +747,8 @@ class DatabaseManager:
             return [dict(row) for row in cur.fetchall()]
 
     def count_excluded(self, query: str = "", admin_id: Optional[int] = None, 
-                       case_type_id: Optional[int] = None, case_type_query: str = "") -> int:
+                       case_type_id: Optional[int] = None, case_type_query: str = "",
+                       search_fields: Optional[List[str]] = None) -> int:
         with self.get_connection() as conn:
             cur = conn.cursor()
             sql = """
@@ -598,7 +761,7 @@ class DatabaseManager:
             """
             params: List[Any] = []
             if query:
-                fields = [
+                fields = search_fields or [
                     "NORMALIZE_AR(e.full_name)",
                     "e.national_id",
                     "NORMALIZE_AR(e.school)",
@@ -630,7 +793,8 @@ class DatabaseManager:
     def search_prisoners(self, query: str = "", admin_id: Optional[int] = None, 
                          case_type_id: Optional[int] = None, case_type_query: str = "",
                          status: Optional[str] = None,
-                         limit: int = 500, offset: int = 0) -> List[Dict[str, Any]]:
+                         limit: int = 500, offset: int = 0,
+                         search_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         with self.get_connection() as conn:
             cur = conn.cursor()
             sql = """
@@ -660,7 +824,7 @@ class DatabaseManager:
             """
             params: List[Any] = []
             if query:
-                fields = [
+                fields = search_fields or [
                     "NORMALIZE_AR(e.full_name)",
                     "e.national_id",
                     "NORMALIZE_AR(e.school)",
@@ -696,7 +860,8 @@ class DatabaseManager:
             return [dict(row) for row in cur.fetchall()]
 
     def count_prisoners(self, query: str = "", admin_id: Optional[int] = None, 
-                        case_type_id: Optional[int] = None, case_type_query: str = "", status: Optional[str] = None) -> int:
+                        case_type_id: Optional[int] = None, case_type_query: str = "", status: Optional[str] = None,
+                        search_fields: Optional[List[str]] = None) -> int:
         with self.get_connection() as conn:
             cur = conn.cursor()
             sql = """
@@ -709,7 +874,7 @@ class DatabaseManager:
             """
             params: List[Any] = []
             if query:
-                fields = [
+                fields = search_fields or [
                     "NORMALIZE_AR(e.full_name)",
                     "e.national_id",
                     "NORMALIZE_AR(e.school)",
@@ -784,9 +949,30 @@ class DatabaseManager:
     # --- Global Unified Search ---
     def unified_search(self, query: str = "", case_type_id: Optional[int] = None, 
                        case_type_query: str = "", admin_id: Optional[int] = None) -> Dict[str, Any]:
-        """Performs instantaneous unified search across both categories."""
-        excluded = self.search_excluded(query=query, admin_id=admin_id, case_type_id=case_type_id, case_type_query=case_type_query, limit=2000)
-        prisoners = self.search_prisoners(query=query, admin_id=admin_id, case_type_id=case_type_id, case_type_query=case_type_query, limit=2000)
+        """Performs instantaneous unified search across both categories.
+        Focuses on Name (prefix/sequential), National ID, Phone, and Record/Case Number.
+        """
+        ex_fields = [
+            "NORMALIZE_AR(e.full_name)",
+            "e.national_id",
+            "e.phone",
+            "CAST(er.record_number AS TEXT)"
+        ]
+        pr_fields = [
+            "NORMALIZE_AR(e.full_name)",
+            "e.national_id",
+            "NORMALIZE_AR(pr.case_number)",
+            "e.phone",
+            "CAST(pr.record_number AS TEXT)"
+        ]
+        excluded = self.search_excluded(
+            query=query, admin_id=admin_id, case_type_id=case_type_id, 
+            case_type_query=case_type_query, limit=2000, search_fields=ex_fields
+        )
+        prisoners = self.search_prisoners(
+            query=query, admin_id=admin_id, case_type_id=case_type_id, 
+            case_type_query=case_type_query, limit=2000, search_fields=pr_fields
+        )
         return {
             "excluded": excluded,
             "prisoners": prisoners,

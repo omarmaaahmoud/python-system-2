@@ -2,7 +2,8 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QStackedWidget, QFrame, QGridLayout, QScrollArea, 
-    QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy, QButtonGroup
+    QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy, QButtonGroup,
+    QMessageBox
 )
 from PySide6.QtGui import QIcon, QPixmap
 from datetime import datetime
@@ -16,6 +17,9 @@ from ui.search_view import AdvancedSearchView
 from ui.duplicate_names_view import DuplicateNamesView
 from ui.import_dialog import ExcelImportDialog
 from ui.smart_scan_dialog import SmartScanDialog
+from ui.update_dialog import UpdateDialog
+from updater.checker import UpdateCheckWorker
+from updater.config import STARTUP_CHECK_DELAY_MS
 
 # System 2 Integration
 from school_security.database import SchoolSecurityDatabaseManager
@@ -52,6 +56,10 @@ class MainWindow(QMainWindow):
 
         self.init_ui()
         self.refresh_dashboard_stats()
+
+        # Background Auto-Update Check
+        self.update_checker = None
+        QTimer.singleShot(STARTUP_CHECK_DELAY_MS, self.check_updates_silent)
 
     def init_ui(self):
         # Central Main Widget with Top-Level Vertical Layout
@@ -346,11 +354,42 @@ class MainWindow(QMainWindow):
         main_menu_layout.addStretch()
         self.sidebar_menu_stack.addWidget(main_menu_page)
 
-        # Footer Version
+        # Footer Version & Auto-Update Check
+        footer_frame = QFrame()
+        footer_layout = QVBoxLayout(footer_frame)
+        footer_layout.setContentsMargins(10, 4, 10, 4)
+        footer_layout.setSpacing(6)
+
         ver_lbl = QLabel(f"الإصدار {APP_VERSION}")
-        ver_lbl.setStyleSheet("color: #64748B; font-size: 10px; padding: 0 14px;")
+        ver_lbl.setStyleSheet("color: #64748B; font-size: 11px;")
         ver_lbl.setAlignment(Qt.AlignCenter)
-        layout.addWidget(ver_lbl)
+        footer_layout.addWidget(ver_lbl)
+
+        self.btn_check_update = QPushButton("🔄  التحقق من وجود تحديثات")
+        self.btn_check_update.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #94A3B8;
+                font-size: 11px;
+                font-weight: 500;
+                border: 1px solid #334155;
+                border-radius: 5px;
+                padding: 5px 8px;
+            }
+            QPushButton:hover {
+                background-color: #1E293B;
+                color: #60A5FA;
+                border-color: #3B82F6;
+            }
+            QPushButton:disabled {
+                color: #64748B;
+                border-color: #1E293B;
+            }
+        """)
+        self.btn_check_update.clicked.connect(self.check_updates_manual)
+        footer_layout.addWidget(self.btn_check_update)
+
+        layout.addWidget(footer_frame)
 
         return sidebar
 
@@ -730,3 +769,64 @@ class MainWindow(QMainWindow):
             cnt_item = QTableWidgetItem(f"{item['total_cases']:,}")
             cnt_item.setTextAlignment(Qt.AlignCenter)
             self.case_table.setItem(r_idx, 1, cnt_item)
+
+    # ==========================================
+    # Auto-Update System Methods
+    # ==========================================
+    def check_updates_silent(self):
+        """Silently checks for updates in background on startup."""
+        self.update_checker = UpdateCheckWorker(is_manual=False, parent=self)
+        self.update_checker.update_available.connect(self.on_update_available)
+        self.update_checker.start()
+
+    def check_updates_manual(self):
+        """User-initiated check for updates with visible feedback."""
+        if hasattr(self, "btn_check_update"):
+            self.btn_check_update.setEnabled(False)
+            self.btn_check_update.setText("⏳ جاري الفحص...")
+
+        self.update_checker = UpdateCheckWorker(is_manual=True, parent=self)
+        self.update_checker.update_available.connect(self.on_update_available)
+        self.update_checker.up_to_date.connect(self.on_up_to_date_manual)
+        self.update_checker.check_failed.connect(self.on_check_failed_manual)
+        self.update_checker.finished.connect(self._reset_update_btn)
+        self.update_checker.start()
+
+    def _reset_update_btn(self):
+        if hasattr(self, "btn_check_update"):
+            self.btn_check_update.setEnabled(True)
+            self.btn_check_update.setText("🔄  التحقق من وجود تحديثات")
+
+    def on_update_available(self, release_info: dict):
+        """Opens modern Update Notification & Download Dialog."""
+        self._reset_update_btn()
+        dialog = UpdateDialog(release_info, parent=self)
+        dialog.exec()
+
+    def on_up_to_date_manual(self, msg: str):
+        self._reset_update_btn()
+        QMessageBox.information(self, "التحقق من التحديثات", f"✅ {msg}")
+
+    def on_check_failed_manual(self, err_msg: str):
+        self._reset_update_btn()
+        QMessageBox.warning(self, "التحقق من التحديثات", f"⚠️ {err_msg}")
+
+    def closeEvent(self, event):
+        """Ensures safe termination of background threads and WAL checkpoints on shutdown."""
+        try:
+            if hasattr(self, "update_checker") and self.update_checker and self.update_checker.isRunning():
+                self.update_checker.terminate()
+                self.update_checker.wait(2000)
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self, "db") and self.db:
+                self.db.safe_checkpoint_and_close()
+            if hasattr(self, "school_security_db") and self.school_security_db:
+                self.school_security_db.safe_checkpoint_and_close()
+        except Exception:
+            pass
+
+        super().closeEvent(event)
+

@@ -1146,7 +1146,8 @@ class OfficialStatementCardDialog(QDialog):
         self.record_type = record_type
         self.db = db_manager
         self.setWindowTitle("بيان حالة موظف (تعديل وحذف) - مديرية التربية والتعليم بالإسكندرية")
-        self.resize(580, 720)
+        self.resize(580, 680)
+        self.setMinimumSize(420, 400)
         self.setLayoutDirection(Qt.RightToLeft)
         if LOGO_PATH.exists():
             self.setWindowIcon(QIcon(str(LOGO_PATH)))
@@ -1223,15 +1224,27 @@ class OfficialStatementCardDialog(QDialog):
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(20, 16, 20, 16)
+        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(16, 12, 16, 12)
+
+        # --- Scrollable Content Area ---
+        from PySide6.QtWidgets import QScrollArea
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setSpacing(8)
+        scroll_layout.setContentsMargins(4, 4, 4, 4)
 
         # Official Government Directorate Banner with Emblem
         banner_h = QHBoxLayout()
         banner_h.setSpacing(12)
         if LOGO_PATH.exists():
             emblem_lbl = QLabel()
-            pix = QPixmap(str(LOGO_PATH)).scaled(52, 52, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pix = QPixmap(str(LOGO_PATH)).scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             emblem_lbl.setPixmap(pix)
             banner_h.addWidget(emblem_lbl)
 
@@ -1239,12 +1252,12 @@ class OfficialStatementCardDialog(QDialog):
         gov_title = QLabel("جمهورية مصر العربية — محافظة الإسكندرية")
         gov_title.setStyleSheet("color: #64748B; font-size: 11px; font-weight: bold;")
         dir_title = QLabel("مديرية التربية والتعليم بالإسكندرية — بيان حالة رسمي")
-        dir_title.setStyleSheet("color: #1E40AF; font-size: 14px; font-weight: bold;")
+        dir_title.setStyleSheet("color: #1E40AF; font-size: 13px; font-weight: bold;")
         gov_v.addWidget(gov_title)
         gov_v.addWidget(dir_title)
         banner_h.addLayout(gov_v)
         banner_h.addStretch()
-        main_layout.addLayout(banner_h)
+        scroll_layout.addLayout(banner_h)
 
         # Container card with subtle border matching Image 1
         card = QFrame()
@@ -1293,9 +1306,11 @@ class OfficialStatementCardDialog(QDialog):
             card_layout.addLayout(self._make_field_row("مكان التسكين", self.data.get("housing_location", "")))
             card_layout.addLayout(self._make_field_row("نوع القضية", self.data.get("case_type_name", "")))
 
-        main_layout.addWidget(card)
+        scroll_layout.addWidget(card)
+        scroll_area.setWidget(scroll_widget)
+        main_layout.addWidget(scroll_area, 1)  # Scroll area takes available space
 
-        # 4. Action Buttons matching Image 1
+        # 4. Action Buttons — ALWAYS pinned at bottom, never hidden
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
 

@@ -65,6 +65,13 @@ cmd = [
     "--hidden-import=school_security.ui.guard_dialog",
     "--hidden-import=school_security.ui.import_dialog",
     "--hidden-import=school_security.ui.table_models",
+    "--hidden-import=updater",
+    "--hidden-import=updater.config",
+    "--hidden-import=updater.version",
+    "--hidden-import=updater.github_client",
+    "--hidden-import=updater.checker",
+    "--hidden-import=updater.downloader",
+    "--hidden-import=ui.update_dialog",
     "--clean",
     "-y",
     "main.py"
@@ -103,6 +110,12 @@ for item in ASSETS_DIR.glob("*"):
         shutil.copytree(item, dest_item)
     else:
         shutil.copy2(item, dest_item)
+
+# Copy Standalone UpdateHelper.exe
+helper_src = DIST_DIR / "UpdateHelper.exe"
+if helper_src.exists():
+    shutil.copy2(helper_src, out_folder / "UpdateHelper.exe")
+    print(">>> Standalone UpdateHelper.exe bundled in output directory.")
 
 # Create Arabic README instructions inside the package
 readme_content = """============================================================

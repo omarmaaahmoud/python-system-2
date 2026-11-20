@@ -133,8 +133,8 @@ def export_records_to_excel(
             val_str = str(ws.cell(row=r, column=col_idx).value or "")
             if len(val_str) > max_len:
                 max_len = len(val_str)
-        calc_width = max(max_len + 4, min_w)
-        ws.column_dimensions[col_letter].width = min(calc_width, 50)
+        calc_width = max(max_len + 3, min_w)
+        ws.column_dimensions[col_letter].width = min(calc_width, 35)
 
     # 6. Freeze Panes at row 6
     ws.freeze_panes = "A6"

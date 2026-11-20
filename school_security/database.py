@@ -4,6 +4,7 @@ Database Manager for School Security Management System.
 Completely isolated SQLite database with WAL mode and foreign key constraints.
 """
 import re
+import time
 import sqlite3
 import logging
 from typing import List, Dict, Any, Optional, Tuple
@@ -32,6 +33,74 @@ def normalize_arabic(text: Any) -> str:
     return s.strip()
 
 
+def tokenize_name(text: Any) -> List[str]:
+    """Tokenizes Arabic or English name into clean tokens, collapsing compound prefixes (عبد, ابو, ام)."""
+    if not text:
+        return []
+    norm = normalize_arabic(text)
+    raw_tokens = norm.split()
+    tokens: List[str] = []
+    i = 0
+    while i < len(raw_tokens):
+        w = raw_tokens[i]
+        if w in ("عبد", "ابو", "ام") and i + 1 < len(raw_tokens):
+            tokens.append(w + raw_tokens[i + 1])
+            i += 2
+        else:
+            tokens.append(w)
+            i += 1
+    return tokens
+
+
+def match_name_sequential(stored_name: Any, query: Any) -> bool:
+    """Matches stored_name against query word by word in exact sequential order starting from word 1."""
+    if not query:
+        return True
+    q_str = str(query).strip()
+    if not q_str:
+        return True
+    if not stored_name:
+        return False
+    n_str = str(stored_name).strip()
+    if not n_str:
+        return False
+
+    q_tokens = tokenize_name(q_str)
+    n_tokens = tokenize_name(n_str)
+
+    if not q_tokens:
+        return True
+    if len(n_tokens) < len(q_tokens):
+        return False
+
+    has_trailing_space = str(query).endswith(" ")
+
+    for idx, q_tok in enumerate(q_tokens):
+        n_tok = n_tokens[idx]
+        is_last = (idx == len(q_tokens) - 1)
+
+        def tokens_match(n: str, q: str, prefix_ok: bool) -> bool:
+            if n == q:
+                return True
+            if prefix_ok and n.startswith(q):
+                return True
+            if n.startswith("ال") and len(n) > 3:
+                n_no_al = n[2:]
+                if n_no_al == q or (prefix_ok and n_no_al.startswith(q)):
+                    return True
+            if q.startswith("ال") and len(q) > 3:
+                q_no_al = q[2:]
+                if n == q_no_al or (prefix_ok and n.startswith(q_no_al)):
+                    return True
+            return False
+
+        allow_prefix = is_last and not has_trailing_space
+        if not tokens_match(n_tok, q_tok, allow_prefix):
+            return False
+
+    return True
+
+
 class SchoolSecurityDatabaseManager:
     """Independent SQLite Database Manager for School Security."""
 
@@ -44,6 +113,7 @@ class SchoolSecurityDatabaseManager:
         conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.create_function("NORMALIZE_AR", 1, normalize_arabic)
+        conn.create_function("MATCH_NAME_SEQUENTIAL", 2, match_name_sequential)
         try:
             conn.execute("PRAGMA foreign_keys = ON;")
             conn.execute("PRAGMA journal_mode = WAL;")
@@ -51,6 +121,41 @@ class SchoolSecurityDatabaseManager:
             yield conn
         finally:
             conn.close()
+
+    def safe_checkpoint_and_close(self, max_retries: int = 3, retry_delay: float = 0.5) -> bool:
+        """Safely checkpoints all WAL frames to the main database file and verifies integrity.
+        Uses PRAGMA wal_checkpoint(TRUNCATE) to merge all journal frames into the database
+        and truncate the WAL file to 0 bytes.
+        """
+        for attempt in range(max_retries):
+            try:
+                conn = sqlite3.connect(self.db_path, timeout=30.0)
+                try:
+                    cur = conn.cursor()
+                    cur.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                    row = cur.fetchone()
+                    if row:
+                        busy, log, checkpointed = row[0], row[1], row[2]
+                        if busy != 0:
+                            logger.warning("SchoolSecurity WAL checkpoint busy (attempt %d/%d). Retrying...", attempt + 1, max_retries)
+                            time.sleep(retry_delay)
+                            continue
+
+                    cur.execute("PRAGMA integrity_check;")
+                    check_result = cur.fetchone()[0]
+                    if check_result != "ok":
+                        logger.error("SchoolSecurity database integrity check failed: %s", check_result)
+                        return False
+
+                    logger.info("SchoolSecurity WAL checkpoint (TRUNCATE) and integrity check succeeded on %s.", self.db_path)
+                    return True
+                finally:
+                    conn.close()
+            except Exception as e:
+                logger.error("Error during SchoolSecurity WAL checkpoint on %s: %s", self.db_path, e)
+                time.sleep(retry_delay)
+
+        return False
 
     def init_db(self):
         """Creates tables, foreign keys, and indexes for School Security."""
