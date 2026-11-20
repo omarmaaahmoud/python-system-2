@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QTextBrowser, QFrame, QMessageBox, QApplication
 )
 from PySide6.QtCore import Qt, QTimer
