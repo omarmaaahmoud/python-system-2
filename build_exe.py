@@ -198,9 +198,10 @@ $sc.Save()
     except Exception as e:
         print(">>> Desktop shortcut skipped or error:", e)
 
-# Deploy build to E:\ExclusionsAndPrisonersSystem (if E drive is connected)
+# Deploy build to E:\ExclusionsAndPrisonersSystem (if E drive is connected and not skipped)
+skip_deploy = "--no-deploy" in sys.argv
 target_drive_e = Path("E:/ExclusionsAndPrisonersSystem")
-if Path("E:/").exists():
+if not skip_deploy and Path("E:/").exists():
     try:
         print(f">>> Deploying build to {target_drive_e} ...")
         target_drive_e.mkdir(parents=True, exist_ok=True)
